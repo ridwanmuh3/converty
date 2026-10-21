@@ -1,0 +1,119 @@
+import { extensionOf } from '#lib/core/format';
+import { LIMITS } from '#lib/core/limits';
+import type { Converter } from '#lib/core/types';
+
+const MIME: Record<string, string> = {
+	png: 'image/png',
+	jpeg: 'image/jpeg',
+	webp: 'image/webp'
+};
+
+const EXT: Record<string, string> = { png: 'png', jpeg: 'jpg', webp: 'webp' };
+
+const LABEL: Record<string, string> = { png: 'PNG', jpeg: 'JPEG', webp: 'WebP', heic: 'HEIC' };
+
+export function throwIfAborted(signal: AbortSignal): void {
+	if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+}
+
+async function decode(file: File): Promise<ImageBitmap | HTMLImageElement> {
+	try {
+		return await createImageBitmap(file);
+	} catch {
+		const ext = extensionOf(file.name);
+		if (ext === 'heic' || ext === 'heif') {
+			const heic2any = (await import('heic2any')).default;
+			const converted = await heic2any({ blob: file, toType: 'image/png' });
+			const blob = (Array.isArray(converted) ? converted[0] : converted) as Blob;
+			return await createImageBitmap(blob);
+		}
+		// Safari occasionally misses a format createImageBitmap supports elsewhere.
+		const url = URL.createObjectURL(file);
+		try {
+			const image = new Image();
+			image.decoding = 'async';
+			image.src = url;
+			await image.decode();
+			return image;
+		} catch {
+			throw new Error(
+				`“${file.name}” could not be decoded. The file may be damaged, or the format is not supported by this browser.`
+			);
+		} finally {
+			setTimeout(() => URL.revokeObjectURL(url), 10_000);
+		}
+	}
+}
+
+function toBlob(canvas: HTMLCanvasElement, mime: string, quality: number): Promise<Blob> {
+	return new Promise((resolve, reject) => {
+		canvas.toBlob(
+			(blob) => {
+				if (!blob) {
+					reject(new Error('The browser could not encode the image at this size. Try a smaller width.'));
+					return;
+				}
+				if (blob.type !== mime) {
+					reject(
+						new Error(
+							`This browser cannot write ${LABEL[mime.split('/')[1]] ?? mime} images. Choose PNG or JPEG instead.`
+						)
+					);
+					return;
+				}
+				resolve(blob);
+			},
+			mime,
+			mime === 'image/png' ? undefined : quality
+		);
+	});
+}
+
+export const convertImage: Converter = async (file, ctx) => {
+	const format = ctx.options.format ?? 'png';
+	const mime = MIME[format] ?? 'image/png';
+	const quality = Math.min(1, Math.max(0.4, Number(ctx.options.quality ?? 0.9)));
+	const maxWidth = Number(ctx.options.maxWidth ?? 0);
+
+	ctx.onProgress(0.08);
+	throwIfAborted(ctx.signal);
+
+	const source = await decode(file);
+	ctx.onProgress(0.4);
+	throwIfAborted(ctx.signal);
+
+	let width = source.width;
+	let height = source.height;
+	if (maxWidth > 0 && width > maxWidth) {
+		height = Math.round((height * maxWidth) / width);
+		width = maxWidth;
+	}
+
+	if (width * height > LIMITS.maxCanvasPixels) {
+		const scale = Math.sqrt(LIMITS.maxCanvasPixels / (width * height));
+		width = Math.max(1, Math.floor(width * scale));
+		height = Math.max(1, Math.floor(height * scale));
+	}
+
+	const canvas = document.createElement('canvas');
+	canvas.width = width;
+	canvas.height = height;
+	const context = canvas.getContext('2d');
+	if (!context) throw new Error('This browser blocked canvas rendering, so images cannot be converted.');
+
+	if (mime === 'image/jpeg') {
+		context.fillStyle = '#ffffff';
+		context.fillRect(0, 0, width, height);
+	}
+	context.imageSmoothingEnabled = true;
+	context.imageSmoothingQuality = 'high';
+	context.drawImage(source as CanvasImageSource, 0, 0, width, height);
+
+	if ('close' in source) source.close();
+	ctx.onProgress(0.75);
+
+	const blob = await toBlob(canvas, mime, quality);
+	ctx.onProgress(1);
+
+	return { blob, ext: EXT[format] ?? 'png' };
+};

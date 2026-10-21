@@ -1,0 +1,7 @@
+node_modules/
+.svelte-kit/
+build/
+test/out/
+test/fixtures/
+.screenshots/
+.DS_Store

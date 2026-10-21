@@ -1,0 +1,18 @@
+export type IconName =
+	| 'image'
+	| 'word'
+	| 'excel'
+	| 'pdf'
+	| 'arrow-right'
+	| 'download'
+	| 'close'
+	| 'check'
+	| 'alert'
+	| 'shield'
+	| 'lock'
+	| 'upload'
+	| 'sun'
+	| 'moon'
+	| 'spark'
+	| 'file'
+	| 'trash';

@@ -1,0 +1,40 @@
+{
+	"name": "fileconvert",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"imports": {
+		"#lib/*": "./src/lib/*"
+	},
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "node test/serve.mjs",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"fixtures": "node test/make-fixtures.mjs",
+		"test:e2e": "node test/make-fixtures.mjs && node test/e2e.mjs",
+		"test:design": "node test/audit.mjs"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-static": "^4.0.0",
+		"@sveltejs/kit": "^3.1.0",
+		"@sveltejs/vite-plugin-svelte": "^7.3.1",
+		"@tailwindcss/vite": "^4.3.3",
+		"playwright-core": "^1.64.1",
+		"svelte": "^5.57.2",
+		"svelte-check": "^4.7.7",
+		"tailwindcss": "^4.3.3",
+		"typescript": "^6.0.3",
+		"vite": "^8.3.5"
+	},
+	"dependencies": {
+		"docx": "^9.13.0",
+		"fflate": "^0.8.3",
+		"heic2any": "^0.0.4",
+		"jspdf": "^4.2.1",
+		"jspdf-autotable": "^5.0.9",
+		"mammoth": "^1.13.0",
+		"pdfjs-dist": "^6.4.299",
+		"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+	}
+}

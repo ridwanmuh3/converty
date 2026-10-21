@@ -1,0 +1,20 @@
+{
+	"extends": "$app/tsconfig",
+	"compilerOptions": {
+		"allowJs": true,
+		// Application code is entirely TypeScript; the Node test harness is plain JS
+		// executed by `node`, so it is validated by running rather than by tsc.
+		"checkJs": false,
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"resolveJsonModule": true,
+		"skipLibCheck": true,
+		"sourceMap": true,
+		"strict": true,
+		"paths": {
+			"#lib/*": ["./src/lib/*"]
+		}
+	},
+	"include": ["src", "test", "*"],
+	"exclude": ["src/service-worker"]
+}
