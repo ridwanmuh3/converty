@@ -1,168 +1,125 @@
 import { baseName } from '#lib/core/format';
 import type { Converter } from '#lib/core/types';
-import { assertHasText, readPdfText, type PdfPageText } from './pdf-text';
+import { assertHasText, readPdfText, type PdfPageText, type PdfTextItem } from './pdf-text';
 
 interface Line {
 	y: number;
 	text: string;
-	height: number;
-}
-
-interface Block {
-	text: string;
-	heading: boolean;
+	size: number;
+	cells: { x: number; text: string }[];
 }
 
 function median(values: number[]): number {
-	if (values.length === 0) return 12;
+	if (!values.length) return 11;
 	const sorted = [...values].sort((a, b) => a - b);
 	return sorted[Math.floor(sorted.length / 2)];
 }
 
 function pageLines(page: PdfPageText): Line[] {
-	const items = [...page.items].sort((a, b) => a.y - b.y || a.x - b.x);
-	const lines: Line[] = [];
-
-	let current: typeof items = [];
-	let currentY = Number.NaN;
-
-	const flush = () => {
-		if (current.length === 0) return;
-		const ordered = [...current].sort((a, b) => a.x - b.x);
-		let text = ordered[0].text;
-		for (let index = 1; index < ordered.length; index += 1) {
-			const previous = ordered[index - 1];
-			const gap = ordered[index].x - (previous.x + previous.width);
-			const needsSpace = gap > Math.max(1, ordered[index].fontHeight * 0.16);
-			text += (needsSpace ? ' ' : '') + ordered[index].text;
-		}
-		lines.push({
-			y: currentY,
-			text: text.replace(/\s+/g, ' ').trim(),
-			height: Math.max(...ordered.map((item) => item.fontHeight))
-		});
-	};
-
+	const items = page.items.filter((item) => item.text.trim()).sort((a, b) => a.y - b.y || a.x - b.x);
+	const groups: PdfTextItem[][] = [];
 	for (const item of items) {
-		const tolerance = Math.max(2, item.fontHeight * 0.45);
-		if (current.length === 0 || Math.abs(item.y - currentY) <= tolerance) {
-			current.push(item);
-			currentY = current.length === 1 ? item.y : (currentY + item.y) / 2;
-		} else {
-			flush();
-			current = [item];
-			currentY = item.y;
-		}
+		const last = groups.at(-1);
+		if (last && Math.abs(item.y - last[0].y) <= Math.max(2, item.fontHeight * 0.4)) last.push(item);
+		else groups.push([item]);
 	}
-	flush();
 
-	return lines.filter((line) => {
-		if (!line.text) return false;
-		// Drop bare page numbers sitting in the footer band.
-		if (/^\d{1,3}$/.test(line.text) && line.y > page.height - 40) return false;
-		return true;
-	});
-}
-
-function pageBlocks(page: PdfPageText): Block[] {
-	const lines = pageLines(page);
-	if (lines.length === 0) return [];
-
-	const bodyHeight = median(lines.map((line) => line.height));
-	const blocks: Block[] = [];
-	let buffer = '';
-	let last: Line | null = null;
-
-	const flush = () => {
-		if (buffer.trim()) blocks.push({ text: buffer.trim(), heading: false });
-		buffer = '';
-	};
-
-	for (const line of lines) {
-		const looksLikeHeading =
-			line.height > bodyHeight * 1.22 &&
-			line.text.length <= 80 &&
-			!/[.,;:]$/.test(line.text) &&
-			line.text.split(' ').length <= 12;
-
-		if (looksLikeHeading) {
-			flush();
-			blocks.push({ text: line.text, heading: true });
-			last = line;
-			continue;
+	return groups.map((group) => {
+		const ordered = group.sort((a, b) => a.x - b.x);
+		const cells: Line['cells'] = [];
+		let text = '';
+		for (let index = 0; index < ordered.length; index++) {
+			const item = ordered[index];
+			const previous = ordered[index - 1];
+			const gap = previous ? item.x - previous.x - previous.width : 0;
+			const space = gap > Math.max(1, item.fontHeight * 0.16);
+			if (!cells.length || gap > Math.max(12, item.fontHeight * 2)) cells.push({ x: item.x, text: item.text });
+			else cells[cells.length - 1].text += (space ? ' ' : '') + item.text;
+			text += (space ? ' ' : '') + item.text;
 		}
-
-		if (!buffer) {
-			buffer = line.text;
-		} else if (last && line.y - last.y > bodyHeight * 1.9) {
-			flush();
-			buffer = line.text;
-		} else if (buffer.endsWith('-') && /^[a-z]/.test(line.text)) {
-			buffer = `${buffer.slice(0, -1)}${line.text}`;
-		} else {
-			buffer = `${buffer} ${line.text}`;
-		}
-		last = line;
-	}
-	flush();
-
-	return blocks;
+		return {
+			y: group[0].y,
+			text: text.replace(/\s+/g, ' ').trim(),
+			size: Math.max(...group.map((item) => item.fontHeight)),
+			cells: cells.map((cell) => ({ ...cell, text: cell.text.trim() }))
+		};
+	}).filter((line) => line.text && !(/^\d{1,3}$/.test(line.text) && line.y > page.height - 40));
 }
 
 export const convertPdfToDocx: Converter = async (file, ctx) => {
 	const pdf = await readPdfText(file, (fraction) => ctx.onProgress(fraction * 0.7), ctx.signal);
 	assertHasText(pdf, file);
+	const pages = pdf.pages.map(pageLines);
+	if (!pages.some((lines) => lines.length)) throw new Error(`“${file.name}” contains no extractable text.`);
 
-	const perPage = pdf.pages.map((page) => pageBlocks(page));
-	const blockCount = perPage.reduce((sum, blocks) => sum + blocks.length, 0);
-	if (blockCount === 0) {
-		throw new Error(`“${file.name}” contains no extractable text.`);
-	}
-
-	const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import('docx');
-
-	const children: InstanceType<typeof Paragraph>[] = [];
-	perPage.forEach((blocks, pageIndex) => {
-		blocks.forEach((block, blockIndex) => {
-			children.push(
-				new Paragraph({
-					pageBreakBefore: pageIndex > 0 && blockIndex === 0,
-					heading: block.heading ? HeadingLevel.HEADING_2 : undefined,
-					spacing: { after: block.heading ? 160 : 120, line: 276 },
-					children: [
-						new TextRun({
-							text: block.text,
-							bold: block.heading,
-							size: block.heading ? 28 : 22
-						})
-					]
-				})
-			);
+	const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, WidthType } = await import('docx');
+	const sections = pdf.pages.map((page, index) => {
+		const lines = pages[index];
+		const bodySize = median(lines.map((line) => line.size));
+		const children: (InstanceType<typeof Paragraph> | InstanceType<typeof Table>)[] = [];
+		const paragraph = (text: string, size: number, heading = false) => new Paragraph({
+			heading: heading ? HeadingLevel.HEADING_2 : undefined,
+			spacing: { after: heading ? 160 : 120, line: 276 },
+			children: [new TextRun({ text, bold: heading, size: Math.round(size * 2) })]
 		});
-	});
 
-	const document = new Document({
-		creator: 'Browser file converter (local)',
-		title: baseName(file.name),
-		styles: {
-			default: {
-				document: {
-					run: { font: 'Calibri', size: 22 },
-					paragraph: { spacing: { line: 276 } }
+		let buffer = '';
+		let previous: Line | undefined;
+		const flush = () => {
+			if (buffer) children.push(paragraph(buffer, bodySize));
+			buffer = '';
+		};
+		for (let i = 0; i < lines.length;) {
+			const line = lines[i];
+			// ponytail: only repeated, aligned text columns become tables; ruled or merged cells need PDF drawing analysis.
+			if (line.cells.length >= 2) {
+				let end = i + 1;
+				while (end < lines.length && lines[end].cells.length === line.cells.length &&
+					lines[end].cells.every((cell, column) => Math.abs(cell.x - line.cells[column].x) < 8) &&
+					lines[end].y - lines[end - 1].y < bodySize * 3.5) end++;
+				if (end - i >= 3) {
+					flush();
+					children.push(new Table({
+						width: { size: 100, type: WidthType.PERCENTAGE },
+						rows: lines.slice(i, end).map((row) => new TableRow({
+							children: row.cells.map((cell) => new TableCell({ children: [paragraph(cell.text, row.size)] }))
+						}))
+					}));
+					i = end;
+					previous = undefined;
+					continue;
 				}
 			}
-		},
-		sections: [
-			{
-				properties: { page: { size: { width: 11906, height: 16838 } } },
-				children
-			}
-		]
+			const heading = line.size > bodySize * 1.22 && line.text.length <= 80 &&
+				!/[.,;:]$/.test(line.text) && line.text.split(' ').length <= 12;
+			if (heading) {
+				flush();
+				children.push(paragraph(line.text, line.size, true));
+			} else if (!buffer) buffer = line.text;
+			else if (previous && line.y - previous.y > bodySize * 1.9) {
+				flush();
+				buffer = line.text;
+			} else if (buffer.endsWith('-') && /^[a-z]/.test(line.text)) buffer = `${buffer.slice(0, -1)}${line.text}`;
+			else buffer += ` ${line.text}`;
+			previous = line;
+			i++;
+		}
+		flush();
+		const left = Math.min(...page.items.map((item) => item.x), 72);
+		return {
+			properties: {
+				page: {
+					size: { width: Math.round(page.width * 20), height: Math.round(page.height * 20) },
+					margin: { left: Math.round(Math.max(0, left) * 20), right: 720, top: 720, bottom: 720 }
+				}
+			},
+			children: children.length ? children : [new Paragraph('')]
+		};
 	});
 
+	const document = new Document({ creator: 'Browser file converter (local)', title: baseName(file.name), sections });
 	ctx.onProgress(0.9);
 	const blob = await Packer.toBlob(document);
 	ctx.onProgress(1);
-
 	return { blob };
 };

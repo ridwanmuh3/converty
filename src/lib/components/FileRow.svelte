@@ -10,7 +10,8 @@
 		onDownload,
 		onRemove,
 		onRetry,
-		oncancel
+		oncancel,
+		busy = false
 	}: {
 		job: Job;
 		icon: ToolIcon;
@@ -18,6 +19,8 @@
 		onRemove: (id: string) => void;
 		onRetry: (id: string) => void;
 		oncancel: (id: string) => void;
+		/** True while the batch runner is active; queue mutations are refused then. */
+		busy?: boolean;
 	} = $props();
 
 	const STATUS: Record<JobState, { label: string; badge: string }> = {
@@ -31,14 +34,14 @@
 	const status = $derived(STATUS[job.state]);
 </script>
 
-<li class="flex items-start gap-3 py-3.5">
+<li class="flex flex-wrap items-start gap-x-3 gap-y-2 py-3.5 sm:flex-nowrap">
 	<span class="mt-0.5 shrink-0 text-mute" aria-hidden="true">
 		<Icon name={icon} size={20} />
 	</span>
 
 	<div class="min-w-0 flex-1">
 		<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-			<p class="t-body-md min-w-0 truncate font-semibold text-ink">{job.file.name}</p>
+			<p class="t-body-md min-w-0 break-all font-semibold text-ink sm:truncate">{job.file.name}</p>
 			<span class="badge {status.badge} tabular">
 				{status.label}{job.state === 'working' ? ` ${Math.round(job.progress * 100)}%` : ''}
 			</span>
@@ -79,7 +82,7 @@
 		{/if}
 	</div>
 
-	<div class="flex shrink-0 items-center gap-1">
+	<div class="flex w-full flex-wrap items-center justify-end gap-1 pl-8 sm:w-auto sm:shrink-0 sm:pl-0">
 		{#if job.state === 'done'}
 			<button
 				type="button"
@@ -88,12 +91,18 @@
 				aria-label="Download {job.resultName}"
 			>
 				<Icon name="download" size={16} />
-				<span class="hidden sm:inline">Download</span>
+				<span>Download</span>
 			</button>
 		{/if}
 
 		{#if job.state === 'error' || job.state === 'cancelled'}
-			<button type="button" class="btn btn-ghost btn-sm" onclick={() => onRetry(job.id)}>
+			<button
+				type="button"
+				class="btn btn-ghost btn-sm"
+				disabled={busy}
+				title={busy ? 'Available when the batch finishes' : 'Retry this file'}
+				onclick={() => onRetry(job.id)}
+			>
 				Retry
 			</button>
 		{/if}
@@ -113,9 +122,10 @@
 			<button
 				type="button"
 				class="btn btn-ghost btn-icon text-mute"
+				disabled={busy}
 				onclick={() => onRemove(job.id)}
 				aria-label="Remove {job.file.name}"
-				title="Remove"
+				title={busy ? 'Available when the batch finishes' : 'Remove'}
 			>
 				<Icon name="trash" size={17} />
 			</button>

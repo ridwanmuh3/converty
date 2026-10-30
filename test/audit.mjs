@@ -4,7 +4,7 @@ import { startServer } from './serve.mjs';
 const BASE = 'http://localhost:4175';
 const server = await startServer(4175);
 const browser = await chromium.launch({
-	executablePath: '/usr/bin/chromium-browser',
+	executablePath: process.env.CHROME_PATH ?? '/usr/bin/chromium-browser',
 	args: ['--no-sandbox']
 });
 
@@ -28,6 +28,69 @@ function contrast(a, b) {
 }
 
 const parseColor = (value) => value.match(/\d+/g).slice(0, 3).map(Number);
+
+/** Walks every text node in the given regions and reports AA contrast failures. */
+async function contrastIssues(page, selector) {
+	return page.evaluate((scope) => {
+		const parseRgb = (value) => {
+			const nums = (value ?? '').match(/[\d.]+/g);
+			return nums && nums.length >= 3 ? nums.slice(0, 3).map(Number) : null;
+		};
+		const channel = (value) => {
+			const c = value / 255;
+			return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+		};
+		const luminance = ([r, g, b]) =>
+			0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+		const ratio = (a, b) => {
+			const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+			return (light + 0.05) / (dark + 0.05);
+		};
+		const backgroundOf = (element) => {
+			let node = element;
+			while (node) {
+				const background = getComputedStyle(node).backgroundColor;
+				if (background && !/rgba\(0, 0, 0, 0\)/.test(background)) {
+					const parsed = parseRgb(background);
+					if (parsed) return parsed;
+				}
+				node = node.parentElement;
+			}
+			return [255, 255, 255];
+		};
+
+		const issues = [];
+		for (const root of document.querySelectorAll(scope)) {
+			const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+			while (walker.nextNode()) {
+				const text = (walker.currentNode.textContent ?? '').trim();
+				if (!text) continue;
+				const element = walker.currentNode.parentElement;
+				if (!element) continue;
+				const style = getComputedStyle(element);
+				if (
+					style.display === 'none' ||
+					style.visibility === 'hidden' ||
+					Number(style.opacity) === 0 ||
+					element.closest('[aria-hidden="true"]')
+				) continue;
+				const fg = parseRgb(style.color);
+				if (!fg) continue;
+				const size = parseFloat(style.fontSize);
+				const weight = Number(style.fontWeight) || 400;
+				const large = size >= 24 || (size >= 18.66 && weight >= 700);
+				const value = ratio(fg, backgroundOf(element));
+				if (value < (large ? 3 : 4.5)) {
+					const classes = typeof element.className === 'string' ? element.className.split(' ')[0] : '';
+					issues.push(
+						`${element.tagName.toLowerCase()}${classes ? '.' + classes : ''} "${text.slice(0, 24)}" ${value.toFixed(2)}`
+					);
+				}
+			}
+		}
+		return issues;
+	}, selector);
+}
 
 for (const viewport of [
 	{ width: 375, height: 812, name: 'mobile' },
@@ -88,8 +151,8 @@ for (const viewport of [
 	check(`${viewport.name}: cards use 12px radius`, metrics.cardRadius === '12px', metrics.cardRadius);
 	check(`${viewport.name}: cards use 24px padding`, metrics.cardPadding === '24px', metrics.cardPadding);
 	check(
-		`${viewport.name}: primary button is Toss blue`,
-		metrics.primaryBackground === 'rgb(49, 130, 246)',
+		`${viewport.name}: primary button uses AA-safe blue`,
+		metrics.primaryBackground === 'rgb(26, 111, 224)',
 		metrics.primaryBackground
 	);
 	check(`${viewport.name}: buttons use 8px radius`, metrics.primaryRadius === '8px', metrics.primaryRadius);
@@ -97,10 +160,17 @@ for (const viewport of [
 	check(`${viewport.name}: display-xl is 30px/700`, metrics.h1Size === '30px' && metrics.h1Weight === '700', `${metrics.h1Size}/${metrics.h1Weight}`);
 	check(`${viewport.name}: line-height matches 1.33`, metrics.h1LineHeight.startsWith('39.9'), metrics.h1LineHeight);
 	check(`${viewport.name}: no pure-black text`, metrics.black.length === 0, metrics.black.join(','));
-	check(`${viewport.name}: five tool cards`, metrics.toolCards >= 5, String(metrics.toolCards));
+	check(`${viewport.name}: one card per tool`, metrics.toolCards >= 4, String(metrics.toolCards));
 
 	const bodyContrast = contrast(parseColor(metrics.bodyColor), parseColor(metrics.pageBackground));
 	check(`${viewport.name}: body text contrast ≥ 4.5`, bodyContrast >= 4.5, bodyContrast.toFixed(2));
+
+	const lightIssues = await contrastIssues(page, 'main, footer, header');
+	check(
+		`${viewport.name}: every text style meets AA contrast`,
+		lightIssues.length === 0,
+		lightIssues.slice(0, 6).join(' | ')
+	);
 
 	// Dark mode parity
 	await page.getByRole('button', { name: /Switch to dark mode/ }).click();
@@ -116,26 +186,58 @@ for (const viewport of [
 	const darkContrast = contrast(parseColor(dark.text), parseColor(dark.background));
 	check(`${viewport.name}: dark body contrast ≥ 4.5`, darkContrast >= 4.5, darkContrast.toFixed(2));
 
+	const darkIssues = await contrastIssues(page, 'main, footer, header');
+	check(
+		`${viewport.name}: dark mode text meets AA contrast`,
+		darkIssues.length === 0,
+		darkIssues.slice(0, 6).join(' | ')
+	);
+
 	await page.close();
 }
 
 // Tool page structure
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-for (const slug of ['image-converter', 'word-to-pdf', 'excel-to-pdf', 'pdf-to-word', 'pdf-to-excel']) {
+for (const slug of [
+	'image-converter',
+	'audio-converter',
+	'jpg-to-pdf',
+	'pdf-to-jpg',
+	'mp4-to-mp3',
+	'word-to-pdf',
+	'excel-to-pdf',
+	'pdf-to-word'
+]) {
 	await page.goto(`${BASE}/${slug}`, { waitUntil: 'networkidle' });
 	const structure = await page.evaluate(() => ({
 		h1: document.querySelector('h1')?.textContent?.trim(),
-		steps: document.querySelectorAll('#how-to-heading ~ ol li').length,
+		strip: /1.*Drop.*2.*Convert.*3.*Download/s.test(
+			document.querySelector('main')?.innerText ?? ''
+		),
+		sideCards: document.querySelectorAll('aside.card').length,
 		dropzone: Boolean(document.querySelector('.dropzone')),
-		limitsListed: document.body.innerText.includes('10'),
+		dropzoneName: (() => {
+			const input = document.querySelector('.dropzone input[type=file]');
+			if (!input) return '';
+			return input.labels?.[0]?.innerText?.trim() ?? input.getAttribute('aria-label') ?? '';
+		})(),
 		uploadClaim: document.body.innerText.includes('Nothing is uploaded'),
 		overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth
 	}));
 	check(`${slug}: has a single h1`, Boolean(structure.h1));
-	check(`${slug}: shows 3 how-to steps`, structure.steps === 3, String(structure.steps));
+	check(`${slug}: shows the compact 1-2-3 strip`, structure.strip);
+	check(`${slug}: exactly one sidebar card`, structure.sideCards === 1, String(structure.sideCards));
 	check(`${slug}: has a drop zone`, structure.dropzone);
+	check(
+		`${slug}: file input is labelled by the drop zone`,
+		structure.dropzoneName.includes('Drop files here'),
+		structure.dropzoneName.slice(0, 48)
+	);
 	check(`${slug}: states the upload guarantee`, structure.uploadClaim);
 	check(`${slug}: no horizontal overflow`, structure.overflow <= 1, `${structure.overflow}px`);
+
+	const toolIssues = await contrastIssues(page, 'main');
+	check(`${slug}: every text style meets AA contrast`, toolIssues.length === 0, toolIssues.slice(0, 6).join(' | '));
 }
 
 // Converter page with a loaded batch, on the smallest viewport.

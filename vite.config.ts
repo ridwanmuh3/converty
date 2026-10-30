@@ -30,6 +30,6 @@ export default defineConfig(async () => ({
 		})
 	],
 	optimizeDeps: {
-		include: ['pdfjs-dist', 'jspdf', 'jspdf-autotable', 'mammoth', 'docx', 'fflate', 'xlsx']
+		include: ['pdfjs-dist', 'jspdf', 'jspdf-autotable', 'docx', 'fflate', 'xlsx']
 	}
 }));

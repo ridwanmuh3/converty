@@ -1,5 +1,6 @@
 export type IconName =
 	| 'image'
+	| 'audio'
 	| 'word'
 	| 'excel'
 	| 'pdf'

@@ -1,4 +1,4 @@
-export type Fidelity = 'good' | 'fair' | 'experimental';
+export type Fidelity = 'good' | 'fair';
 
 export type ConvertOptions = Record<string, string>;
 

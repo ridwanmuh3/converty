@@ -5,17 +5,38 @@
 	import Nav from '#lib/components/Nav.svelte';
 	import type { IconName } from '#lib/components/icon-names';
 	import { LIMITS } from '#lib/core/limits';
-	import { TOOLS } from '#lib/tools/registry';
+	import { TOOLS, type ToolCategory, type ToolDef } from '#lib/tools/registry';
+
+	const groups: { id: ToolCategory; label: string; blurb: string; tools: ToolDef[] }[] = [
+		{
+			id: 'audio',
+			label: 'Audio',
+			blurb: 'MP3, WAV, MP4 and video audio',
+			tools: TOOLS.filter((tool) => tool.category === 'audio')
+		},
+		{
+			id: 'image',
+			label: 'Images',
+			blurb: 'JPG, PNG, WebP, HEIC and PDF',
+			tools: TOOLS.filter((tool) => tool.category === 'image')
+		},
+		{
+			id: 'document',
+			label: 'Documents',
+			blurb: 'Word, Excel and PDF',
+			tools: TOOLS.filter((tool) => tool.category === 'document')
+		}
+	];
 
 	const steps: { icon: IconName; title: string; body: string }[] = [
 		{
 			icon: 'spark',
 			title: 'Pick a converter',
-			body: 'Five tools: images, Word, Excel, and PDF in both directions.'
+			body: 'Convert audio, images, Word, Excel, and PDF.'
 		},
 		{
 			icon: 'upload',
-			title: 'Drop up to 10 files',
+			title: 'Add files',
 			body: 'Files load straight into this tab. Nothing is sent anywhere.'
 		},
 		{
@@ -38,13 +59,13 @@
 		},
 		{
 			icon: 'spark',
-			title: 'Survives a dropped connection',
-			body: 'Once the tool has loaded, conversion never needs another network request.'
+			title: 'Conversion runs in this tab',
+			body: 'Files are processed in your browser. Keep the tab open until conversion finishes.'
 		},
 		{
 			icon: 'file',
-			title: 'No file-size paywall',
-			body: 'The batch cap protects your device’s memory. It is not a subscription prompt.'
+			title: 'Input size limits',
+			body: 'Files are limited to 25 MB each and 100 MB of input per batch. Decoded files can use more memory.'
 		}
 	];
 
@@ -55,7 +76,7 @@
 		},
 		{
 			q: 'Why isn’t PDF → Word perfect?',
-			a: 'A PDF does not contain paragraphs or tables — only glyphs at coordinates. Rebuilding an editable document from that is reconstruction, not recovery. Text and reading order survive; images, columns and exact fonts usually do not.'
+			a: 'PDF text is placed at coordinates, not stored as editable paragraphs. Conversion rebuilds paragraphs and some aligned tables; reading order, images and fonts can differ.'
 		},
 		{
 			q: 'Can it convert scanned PDFs?',
@@ -70,17 +91,17 @@
 			a: 'Only the modern formats are supported. Open the file in Word or Excel and use Save As to create a .docx or .xlsx, then drop that in.'
 		},
 		{
-			q: 'Why only 10 files at a time?',
-			a: 'Each conversion holds a file and its output in memory. Ten files is a safe ceiling for phones and older laptops; the queue processes them one at a time so the page stays responsive.'
+			q: 'How many files can I convert together?',
+			a: 'There is no file-count cap. Input is limited to 25 MB per file and 100 MB per batch. Files are converted one at a time, but output and decoded data may use more memory than input size.'
 		}
 	];
 </script>
 
 <svelte:head>
-	<title>LocalConvert — convert PDF, Word, Excel and images in your browser</title>
+	<title>LocalConvert — convert audio, PDF, Word, Excel and images in your browser</title>
 	<meta
 		name="description"
-		content="Convert PDF to Word, Word to PDF, Excel to PDF and images between formats. Runs entirely in your browser — no uploads, no account, up to 10 files per batch."
+		content="Convert MP3, WAV, MPEG audio, PDF, Word, Excel and images in your browser. Input limit: 25 MB per file, 100 MB per batch."
 	/>
 </svelte:head>
 
@@ -98,8 +119,7 @@
 				<h1 class="t-display-xl mt-5 text-ink">Convert files without uploading them.</h1>
 
 				<p class="t-body-lg mt-4 max-w-[580px] text-body">
-					PDF, Word, Excel and images — up to ten files at a time. Nothing is sent to a server,
-					because there is no server to send it to.
+					Convert audio, PDF, Word, Excel and images in this tab. Files are not uploaded for conversion.
 				</p>
 
 				<div class="mt-8 flex flex-wrap gap-3">
@@ -112,7 +132,7 @@
 
 				<ul class="t-body-sm mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-body">
 					<li class="flex items-center gap-1.5">
-						<Icon name="check" size={16} /> {LIMITS.maxFiles} files per batch
+						<Icon name="check" size={16} /> Files processed one at a time
 					</li>
 					<li class="flex items-center gap-1.5">
 						<Icon name="check" size={16} /> {LIMITS.maxFileBytes / 1024 / 1024} MB per file
@@ -129,39 +149,52 @@
 		<div class="max-w-[620px]">
 			<h2 class="t-display-lg text-ink">Pick a converter</h2>
 			<p class="t-body-lg mt-2 text-body">
-				Every tool tells you up front how faithful its output is. No surprises after the download.
+				Each tool lists supported formats and known limits before conversion.
 			</p>
 		</div>
 
-		<ul class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-			{#each TOOLS as tool}
-				<li>
-					<a
-						href="/{tool.slug}"
-						class="card flex h-full flex-col gap-4 p-6 transition hover:border-line-strong hover:shadow-[var(--shadow-2)]"
-					>
-						<div class="flex items-start justify-between gap-3">
-							<span
-								class="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] bg-bone text-ink"
-							>
-								<Icon name={tool.icon} size={21} />
-							</span>
-							<FidelityBadge fidelity={tool.fidelity} />
+		<div class="mt-8 space-y-10">
+			{#each groups as group}
+				{#if group.tools.length > 0}
+					<section aria-labelledby="group-{group.id}">
+						<div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+							<h3 id="group-{group.id}" class="t-heading-md text-ink">{group.label}</h3>
+							<p class="t-body-sm text-mute">{group.blurb}</p>
 						</div>
 
-						<div>
-							<h3 class="t-heading-md text-ink">{tool.name}</h3>
-							<p class="t-body-md mt-1 text-body">{tool.tagline}</p>
-						</div>
+						<ul class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+							{#each group.tools as tool}
+								<li>
+									<a
+										href="/{tool.slug}"
+										class="card flex h-full flex-col gap-4 p-6 transition hover:border-line-strong hover:shadow-[var(--shadow-2)]"
+									>
+										<div class="flex items-start justify-between gap-3">
+											<span
+												class="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] bg-bone text-ink"
+											>
+												<Icon name={tool.icon} size={21} />
+											</span>
+											<FidelityBadge fidelity={tool.fidelity} />
+										</div>
 
-						<span class="t-body-sm mt-auto inline-flex items-center gap-1 font-semibold text-ink">
-							Open tool
-							<Icon name="arrow-right" size={16} />
-						</span>
-					</a>
-				</li>
+										<div>
+											<h3 class="t-heading-md text-ink">{tool.name}</h3>
+											<p class="t-body-md mt-1 text-body">{tool.tagline}</p>
+										</div>
+
+										<span class="t-body-sm mt-auto inline-flex items-center gap-1 font-semibold text-ink">
+											Open tool
+											<Icon name="arrow-right" size={16} />
+										</span>
+									</a>
+								</li>
+							{/each}
+						</ul>
+					</section>
+				{/if}
 			{/each}
-		</ul>
+		</div>
 	</section>
 
 	<section id="how" class="scroll-mt-20 border-y border-line bg-bone">
@@ -195,11 +228,9 @@
 			<div class="grid gap-10 lg:grid-cols-[1fr_1.1fr] lg:gap-16">
 				<div>
 					<span class="badge badge-neutral">Privacy by architecture</span>
-					<h2 class="t-display-lg mt-4 text-ink">There is no upload. Not even a small one.</h2>
+					<h2 class="t-display-lg mt-4 text-ink">Files stay in this tab during conversion.</h2>
 					<p class="t-body-lg mt-3 max-w-[480px] text-body">
-						Most “free” converters upload your file, process it on a server, then ask you to trust
-						their deletion policy. Here the file never leaves the tab, so there is no policy to
-						trust.
+						Conversion runs in your browser. The page may load its own scripts, but file contents are not sent to a conversion server.
 					</p>
 
 					<div class="card mt-6 p-5">
@@ -233,17 +264,11 @@
 			<div class="max-w-[620px]">
 				<h2 class="t-display-lg text-ink">Limits you can plan around</h2>
 				<p class="t-body-lg mt-2 text-body">
-					These ceilings protect your device’s memory. They are not a paywall, and there is no
-					upgrade that raises them.
+					Input limits reduce memory pressure. Decoded images, audio and output files can use more memory than their inputs.
 				</p>
 			</div>
 
-			<div class="mt-8 grid gap-4 sm:grid-cols-3">
-				<div class="card p-6">
-					<p class="t-display-lg tabular text-ink">{LIMITS.maxFiles}</p>
-					<p class="t-body-md mt-1 text-body">files per batch</p>
-					<p class="t-body-sm mt-2 text-mute">Processed one at a time, in order.</p>
-				</div>
+			<div class="mt-8 grid gap-4 sm:grid-cols-2">
 				<div class="card p-6">
 					<p class="t-display-lg tabular text-ink">{LIMITS.maxFileBytes / 1024 / 1024} MB</p>
 					<p class="t-body-md mt-1 text-body">per file</p>

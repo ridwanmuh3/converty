@@ -16,16 +16,22 @@ export function throwIfAborted(signal: AbortSignal): void {
 	if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 }
 
+type Canvas = HTMLCanvasElement | OffscreenCanvas;
+
 async function decode(file: File): Promise<ImageBitmap | HTMLImageElement> {
 	try {
 		return await createImageBitmap(file);
 	} catch {
 		const ext = extensionOf(file.name);
 		if (ext === 'heic' || ext === 'heif') {
-			const heic2any = (await import('heic2any')).default;
-			const converted = await heic2any({ blob: file, toType: 'image/png' });
-			const blob = (Array.isArray(converted) ? converted[0] : converted) as Blob;
-			return await createImageBitmap(blob);
+			// Kept out of this module on purpose: importing heic2any here would pull
+			// its whole decoder into the worker bundle even though HEIC never runs there.
+			throw new Error(`“${file.name}” needs the main-thread HEIC decoder.`);
+		}
+		if (typeof Image === 'undefined') {
+			throw new Error(
+				`“${file.name}” could not be decoded. The file may be damaged, or the format is not supported by this browser.`
+			);
 		}
 		// Safari occasionally misses a format createImageBitmap supports elsewhere.
 		const url = URL.createObjectURL(file);
@@ -45,7 +51,18 @@ async function decode(file: File): Promise<ImageBitmap | HTMLImageElement> {
 	}
 }
 
-function toBlob(canvas: HTMLCanvasElement, mime: string, quality: number): Promise<Blob> {
+function createCanvas(width: number, height: number): Canvas {
+	if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(width, height);
+	const canvas = document.createElement('canvas');
+	canvas.width = width;
+	canvas.height = height;
+	return canvas;
+}
+
+function toBlob(canvas: Canvas, mime: string, quality: number): Promise<Blob> {
+	const options = mime === 'image/png' ? undefined : quality;
+	if ('convertToBlob' in canvas) return canvas.convertToBlob({ type: mime, quality: options });
+
 	return new Promise((resolve, reject) => {
 		canvas.toBlob(
 			(blob) => {
@@ -64,7 +81,7 @@ function toBlob(canvas: HTMLCanvasElement, mime: string, quality: number): Promi
 				resolve(blob);
 			},
 			mime,
-			mime === 'image/png' ? undefined : quality
+			options
 		);
 	});
 }
@@ -95,10 +112,8 @@ export const convertImage: Converter = async (file, ctx) => {
 		height = Math.max(1, Math.floor(height * scale));
 	}
 
-	const canvas = document.createElement('canvas');
-	canvas.width = width;
-	canvas.height = height;
-	const context = canvas.getContext('2d');
+	const canvas = createCanvas(width, height);
+	const context = canvas.getContext('2d') as CanvasRenderingContext2D | null;
 	if (!context) throw new Error('This browser blocked canvas rendering, so images cannot be converted.');
 
 	if (mime === 'image/jpeg') {

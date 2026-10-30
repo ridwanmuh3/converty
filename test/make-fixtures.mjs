@@ -1,12 +1,17 @@
+import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { jsPDF } from 'jspdf';
 import {
+	AlignmentType,
 	Document,
+	Footer,
+	Header,
+	HeadingLevel,
+	PageNumber,
 	Packer,
 	Paragraph,
 	TextRun,
-	HeadingLevel,
 	Table,
 	TableRow,
 	TableCell,
@@ -16,6 +21,29 @@ import * as XLSX from 'xlsx';
 
 const out = join(process.cwd(), 'test', 'fixtures');
 await mkdir(out, { recursive: true });
+
+/* ---------- JPEG and MP4 fixtures (need ffmpeg; skipped when absent) ---------- */
+{
+	try {
+		const run = (args) =>
+			execFileSync('ffmpeg', ['-y', '-loglevel', 'error', ...args], { stdio: 'ignore' });
+		run(['-f', 'lavfi', '-i', 'color=c=orange:s=1200x800', '-frames:v', '1', join(out, 'photo.jpg')]);
+		// MP3-in-MP4 keeps the fixture decodable in browsers without AAC support.
+		run([
+			'-f',
+			'lavfi',
+			'-i',
+			'sine=frequency=440:duration=2',
+			'-c:a',
+			'libmp3lame',
+			'-b:a',
+			'64k',
+			join(out, 'clip.mp4')
+		]);
+	} catch {
+		console.warn('ffmpeg unavailable — photo.jpg and clip.mp4 were not generated');
+	}
+}
 
 /* ---------- PDF with a text layer and a simple table ---------- */
 {
@@ -64,18 +92,54 @@ await mkdir(out, { recursive: true });
 	await writeFile(join(out, 'scan.pdf'), Buffer.from(doc.output('arraybuffer')));
 }
 
-/* ---------- DOCX ---------- */
+/* ---------- DOCX: geometry, styles, lists, header/footer fields ---------- */
 {
 	const document = new Document({
 		sections: [
 			{
+				properties: {
+					page: {
+						size: { width: 11906, height: 16838 }, // A4 in twips
+						margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 }
+					}
+				},
+				headers: {
+					default: new Header({
+						children: [
+							new Paragraph({
+								alignment: AlignmentType.RIGHT,
+								children: [new TextRun({ text: 'Confidential draft', italics: true, size: 18 })]
+							})
+						]
+					})
+				},
+				footers: {
+					default: new Footer({
+						children: [
+							new Paragraph({
+								alignment: AlignmentType.CENTER,
+								children: [
+									new TextRun({ text: 'Page ', size: 16 }),
+									new TextRun({ children: [PageNumber.CURRENT], size: 16 }),
+									new TextRun({ text: ' of ', size: 16 }),
+									new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 16 })
+								]
+							})
+						]
+					})
+				},
 				children: [
 					new Paragraph({ heading: HeadingLevel.HEADING_1, text: 'Project update' }),
 					new Paragraph({
+						alignment: AlignmentType.JUSTIFIED,
 						children: [
 							new TextRun('This is a paragraph with '),
 							new TextRun({ text: 'bold text', bold: true }),
-							new TextRun(' to check inline handling.')
+							new TextRun(', '),
+							new TextRun({ text: 'red text', color: 'C00000' }),
+							new TextRun(', '),
+							new TextRun({ text: 'underlined text', underline: {} }),
+							new TextRun(' and normal text to check inline handling against the source styling.')
 						]
 					}),
 					new Paragraph({ text: 'A short list follows.', spacing: { after: 120 } }),
@@ -133,10 +197,31 @@ await mkdir(out, { recursive: true });
 /* ---------- PNG ---------- */
 {
 	const png = Buffer.from(
-		'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAFklEQVQoz2NkYPjPwMDAwMDAwMDAwAAAJgAB0yq1WQAAAABJRU5ErkJggg==',
+		'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAACXBIWXMAAAABAAAAAQBPJcTWAAAAYUlEQVR4nO3PQQkAIADAQAVza3VD+DiEXYJtjn3Gz5YOeNWA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaAdgHQ8AH7Ze++yQAAAABJRU5ErkJggg==',
 		'base64'
 	);
 	await writeFile(join(out, 'pixel.png'), png);
+}
+
+/* ---------- Short PCM WAV tone ---------- */
+{
+	const rate = 44_100;
+	const length = rate / 4;
+	const wav = Buffer.alloc(44 + length * 2);
+	wav.write('RIFF', 0);
+	wav.writeUInt32LE(wav.length - 8, 4);
+	wav.write('WAVEfmt ', 8);
+	wav.writeUInt32LE(16, 16);
+	wav.writeUInt16LE(1, 20);
+	wav.writeUInt16LE(1, 22);
+	wav.writeUInt32LE(rate, 24);
+	wav.writeUInt32LE(rate * 2, 28);
+	wav.writeUInt16LE(2, 32);
+	wav.writeUInt16LE(16, 34);
+	wav.write('data', 36);
+	wav.writeUInt32LE(length * 2, 40);
+	for (let i = 0; i < length; i++) wav.writeInt16LE(Math.round(Math.sin(i * 440 * 2 * Math.PI / rate) * 8000), 44 + i * 2);
+	await writeFile(join(out, 'tone.wav'), wav);
 }
 
 console.log('fixtures written to', out);

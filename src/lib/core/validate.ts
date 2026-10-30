@@ -2,7 +2,7 @@ import { extensionOf } from './format';
 import { LIMITS } from './limits';
 import type { ToolDef } from '#lib/tools/registry';
 
-export type FileKind = 'pdf' | 'zip' | 'ole' | 'png' | 'jpeg' | 'webp' | 'gif' | 'bmp' | 'avif' | 'heic' | 'csv' | 'unknown';
+export type FileKind = 'pdf' | 'zip' | 'ole' | 'png' | 'jpeg' | 'webp' | 'gif' | 'bmp' | 'avif' | 'heic' | 'mp4' | 'csv' | 'wav' | 'mp3' | 'unknown';
 
 const startsWith = (bytes: Uint8Array, signature: number[]) =>
 	signature.every((value, index) => bytes[index] === value);
@@ -22,10 +22,16 @@ export async function detectKind(file: File): Promise<FileKind> {
 	if (startsWith(bytes, [0x47, 0x49, 0x46, 0x38])) return 'gif';
 	if (startsWith(bytes, [0x42, 0x4d])) return 'bmp';
 	if (ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 4) === 'WEBP') return 'webp';
+	if (ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 4) === 'WAVE') return 'wav';
+	if (ascii(bytes, 0, 3) === 'ID3' || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0 && (bytes[1] & 0x18) !== 0x08)) return 'mp3';
 	if (ascii(bytes, 4, 4) === 'ftyp') {
 		const brand = ascii(bytes, 8, 4);
 		if (brand === 'avif' || brand === 'avis') return 'avif';
 		if (['heic', 'heix', 'hevc', 'hevx', 'mif1', 'msf1'].includes(brand)) return 'heic';
+		// MP4, M4A, M4V and QuickTime containers share the same box layout.
+		if (['mp41', 'mp42', 'isom', 'iso2', 'iso4', 'iso5', 'avc1', 'M4V ', 'M4A ', 'M4B ', 'qt  ', 'dash'].includes(brand)) {
+			return 'mp4';
+		}
 	}
 	// CSV has no signature; trust the extension only when the file is plain text.
 	if (ext === 'csv' && !bytes.includes(0)) return 'csv';
@@ -44,7 +50,10 @@ const KIND_LABEL: Record<FileKind, string> = {
 	bmp: 'BMP image',
 	avif: 'AVIF image',
 	heic: 'HEIC image',
+	mp4: 'MP4/MOV file',
 	csv: 'CSV file',
+	wav: 'WAV audio',
+	mp3: 'MPEG audio',
 	unknown: 'unknown file type'
 };
 
@@ -89,7 +98,14 @@ export async function validateForTool(file: File, tool: ToolDef): Promise<string
 		bmp: ['bmp'],
 		avif: ['avif'],
 		heic: ['heic'],
-		heif: ['heic']
+		heif: ['heic'],
+		mp4: ['mp4'],
+		m4v: ['mp4'],
+		mov: ['mp4'],
+		m4a: ['mp4'],
+		wav: ['wav'],
+		mp3: ['mp3'],
+		mpeg: ['mp3']
 	};
 	const allowed = expected[ext];
 	if (allowed && !allowed.includes(kind)) {

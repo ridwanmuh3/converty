@@ -8,6 +8,7 @@
 	}: { name: IconName; size?: number; strokeWidth?: number } = $props();
 
 	const paths: Record<IconName, string[]> = {
+		audio: ['M9 18V5l12-2v13', 'M9 18a3 2 0 1 1-6 0 3 2 0 0 1 6 0', 'M21 16a3 2 0 1 1-6 0 3 2 0 0 1 6 0'],
 		image: [
 			'M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5z',
 			'M8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3',

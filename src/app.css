@@ -10,6 +10,7 @@
 
 	--color-primary: var(--primary);
 	--color-primary-deep: var(--primary-deep);
+	--color-primary-text: var(--primary-text);
 	--color-secondary: var(--secondary);
 	--color-canvas: var(--background);
 	--color-bone: var(--bone);
@@ -35,9 +36,12 @@
 }
 
 :root {
-	--primary: #3182f6;
-	--primary-deep: #2272eb;
-	--primary-pressed: #1c62c9;
+	--primary: #1a6fe0;
+	--primary-deep: #155fc4;
+	--primary-pressed: #124fa5;
+	/* Text/icon variant: #1a6fe0 already passes AA on white, but dark mode needs a
+	   lighter blue to stay legible on #1a1a1a cards. */
+	--primary-text: #1a6fe0;
 	--secondary: #f2f4f6;
 	--background: #ffffff;
 	--bone: #f2f4f6;
@@ -47,7 +51,7 @@
 	--ink: #191f28;
 	--foreground: #191f28;
 	--body: #66717e;
-	--mute: #6f7780;
+	--mute: #5f6a77;
 	--ash: #333d4b;
 	--stone: #4e5968;
 	--line: #e5e8eb;
@@ -55,9 +59,9 @@
 	--hairline: #939597;
 	--success: #03b26c;
 	--warning: #fe9800;
-	--info: #18a5a5;
-	--danger: #f04452;
-	--ring-focus: rgba(49, 130, 246, 0.5);
+	--info: #0c7c7c;
+	--danger: #d32f3f;
+	--ring-focus: rgba(26, 111, 224, 0.5);
 	--hero-pink: #e8f3ff;
 	--hero-glow: #5a9cfa;
 	--on-primary: #ffffff;
@@ -72,9 +76,10 @@
 }
 
 [data-theme='dark'] {
-	--primary: #3182f6;
-	--primary-deep: #5a9cfa;
-	--primary-pressed: #3f8cf7;
+	--primary: #1a6fe0;
+	--primary-deep: #155fc4;
+	--primary-pressed: #124fa5;
+	--primary-text: #6aa8ff;
 	--secondary: #1a1a1a;
 	--background: #0a0a0a;
 	--bone: #1a1a1a;
@@ -90,7 +95,9 @@
 	--line: #2e2e2e;
 	--line-strong: #404040;
 	--hairline: #5d5d5d;
-	--on-primary: #0a0a0a;
+	--on-primary: #ffffff;
+	--danger: #ff8a92;
+	--ring-focus: rgba(106, 168, 255, 0.5);
 
 	--shadow-1: 0 1px 3px rgba(0, 0, 0, 0.4);
 	--shadow-2: 0 2px 8px rgba(0, 0, 0, 0.5);
@@ -324,7 +331,7 @@
 	}
 	.badge-neutral {
 		background: var(--bone);
-		color: var(--body);
+		color: var(--stone);
 		border: 1px solid var(--line);
 	}
 	.badge-danger {
@@ -397,7 +404,12 @@
 	}
 	[data-theme='dark'] .dropzone:hover,
 	[data-theme='dark'] .dropzone[data-dragging='true'] {
-		background: rgba(49, 130, 246, 0.08);
+		background: rgba(26, 111, 224, 0.08);
+	}
+	/* The file input is visually hidden, so the focus ring lives on the label. */
+	.dropzone:focus-within {
+		outline: 2px solid var(--ring-focus);
+		outline-offset: 2px;
 	}
 
 	.navbar {

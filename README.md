@@ -1,23 +1,30 @@
 # LocalConvert
 
-Five file converters that run entirely in the browser. No upload endpoint, no accounts, no ads.
+Twelve file converters that run entirely in the browser. No upload endpoint, no accounts, no ads.
 
 | Tool | Route | Fidelity |
 |---|---|---|
+| Audio converter (MP3/WAV in, MP3/WAV out) | `/audio-converter` | Re-encoded |
+| MP3 converter (MP3/WAV/M4A in) | `/mp3-converter` | Re-encoded |
+| MP4 → MP3 | `/mp4-to-mp3` | Audio only, re-encoded |
+| Video → MP3 (MP4/MOV) | `/video-to-mp3` | Audio only, re-encoded |
 | Image converter (PNG/JPEG/WebP, HEIC in) | `/image-converter` | High |
+| JPG → PDF | `/jpg-to-pdf` | High — image embedded |
+| Image → PDF (PNG/JPEG/WebP/GIF/BMP) | `/image-to-pdf` | High — image embedded |
+| PDF → JPG | `/pdf-to-jpg` | Rendered pages |
+| HEIC → JPG | `/heic-to-jpg` | Re-encoded JPEG |
 | Word → PDF | `/word-to-pdf` | Good, not identical |
 | Excel → PDF | `/excel-to-pdf` | Good for tables |
 | PDF → Word | `/pdf-to-word` | Text first, layout second |
-| PDF → Excel | `/pdf-to-excel` | Experimental |
 
-Batch of 10 files, 25 MB each, 100 MB total, 200 pages per PDF.
+No file-count cap. 25 MB per file, 100 MB of input per batch, 200 pages per PDF, 60 pages for PDF → JPG, 10 minutes for audio and 30 minutes for video-to-MP3.
 
 ## Stack
 
 SvelteKit 3 · Svelte 5 (runes) · TypeScript · Tailwind 4 · `@sveltejs/adapter-static` (fully prerendered).
-Client libraries: `pdfjs-dist` (read), `jspdf` + `jspdf-autotable` (write), `mammoth` (DOCX read), `docx` (DOCX write), SheetJS (XLSX), `fflate` (ZIP), `heic2any` (HEIC input).
+Client libraries: `pdfjs-dist` (PDF read + render), `jspdf` + `jspdf-autotable` (DOCX/XLSX → PDF), `pdf-lib` (image → PDF, worker-safe), `fflate` (ZIP), `docx` (DOCX write), SheetJS (XLSX), `heic2any` (HEIC input), `mp4box` + WebCodecs (video demux/decode), `lamejs` (MP3 encode).
 
-Heavy libraries are imported inside each pipeline, so the image tool never downloads the PDF engine. Measured: 44 KB of resources for an image conversion vs a 1.26 MB PDF worker on PDF routes; the end-to-end test asserts this.
+Heavy libraries are imported inside each pipeline, and conversion runs in module workers with one entry per family (`src/lib/workers/entries/`). The image tool loads a 3.3 KB worker and never downloads the PDF engine, pdf-lib or the video demuxer; the end-to-end test asserts this and that the worker was actually used.
 
 ## Commands
 
@@ -28,8 +35,8 @@ npm run build      # static site in ./build
 npm run preview    # serve ./build with clean URLs (test/serve.mjs)
 npm run check      # svelte-check + TypeScript
 npm run fixtures   # generate test/fixtures
-npm run test:e2e    # Chromium end-to-end conversions (33 checks)
-npm run test:design # token, touch-target, overflow and dark-mode audit (58 checks)
+npm run test:e2e    # Chromium end-to-end conversions (53 checks)
+npm run test:design # token, contrast, touch-target, overflow and dark-mode audit (101 checks)
 ```
 
 `test:e2e` needs Chromium. Set `CHROME_PATH` if it is not at `/usr/bin/chromium-browser`.
@@ -39,10 +46,13 @@ npm run test:design # token, touch-target, overflow and dark-mode audit (58 chec
 | Conversion | Method | What is lost |
 |---|---|---|
 | Images | `createImageBitmap` → canvas → `toBlob` | Animation, EXIF, HEIC/AVIF output |
-| DOCX → PDF | `mammoth` → HTML → jsPDF block layout + autoTable | Custom fonts, columns, headers/footers, exact page breaks |
+| DOCX → PDF | Parse OOXML directly (`fflate` + custom layout) → jsPDF block layout + autoTable | Text boxes, tracked changes, exact pagination, un-embedded exotic fonts |
 | XLSX → PDF | SheetJS → matrix → autoTable | Charts, images, fills, print areas |
 | PDF → DOCX | pdf.js text positions → line/paragraph heuristics → `docx` | Images, tables (become paragraphs), fonts, columns |
-| PDF → XLSX | pdf.js text positions → row/column clustering → SheetJS | Merged cells, rotated text, scans; one sheet per page |
+| Audio | `AudioContext` decode → 16-bit PCM WAV, or lamejs MP3 at 128 kbps | Metadata, clips over 10 minutes, more than two channels |
+| JPG/PNG/WebP → PDF | `pdf-lib` embeds the image; page is A4, Letter or matched to the image | EXIF orientation; one PDF per image |
+| PDF → JPG | pdf.js renders each page to an `OffscreenCanvas`, then JPEG (ZIP when more than one page) | Text becomes pixels; 60 pages maximum |
+| MP4/MOV → MP3 | mp4box demuxes the audio track, WebCodecs decodes it, lamejs encodes 128 kbps | Video stream, metadata, browsers without the audio codec |
 
 **Why jsPDF instead of the browser print dialog.** The plan originally used `window.print()` for DOCX/XLSX → PDF. Print produces slightly nicer typography but is interactive: it cannot batch, cannot ZIP, and cannot report per-file progress. Since batching was a hard requirement, the pipeline re-lays-out the document with jsPDF and returns a real Blob. The trade-off is that jsPDF's built-in fonts are WinAnsi-only, so non-Latin text is **rejected with an explanation** instead of being silently corrupted.
 
@@ -61,7 +71,12 @@ Cloudflare Pages: build command `npm run build`, output directory `build`. The `
 
 - No OCR. Scanned PDFs are detected and rejected rather than producing empty output.
 - PDF output (DOCX/XLSX → PDF) is Latin-script only.
-- PDF → Excel is a heuristic; always check the cells.
+- Audio is capped at 10 minutes and 200 MB decoded; video audio is capped at 30 minutes. MP3 output is re-encoded at 128 kbps, so MP3 → MP3 loses quality.
+- Video audio extraction needs WebCodecs decode support for the clip's codec; unsupported browsers are told, not silently given a broken file.
+- PDF → JPG rasterises text and stops at 60 pages.
+- HEIC is decoded with heic2any on the main thread, so the HEIC route is not covered by the worker path.
+- Image → PDF creates one PDF per image; combining several images into one file is not supported yet.
+- Images above 16.7 megapixels are scaled down to fit the browser canvas limit, and the page says so.
 - GIF → first frame only; HEIC/AVIF are input-only.
 - Sequential queue, not parallel: one file at a time keeps memory predictable on phones.
 - Analog analytics were deliberately dropped: the Cloudflare beacon is a third-party request, which would weaken the "no third-party code" claim on the pages that handle files.

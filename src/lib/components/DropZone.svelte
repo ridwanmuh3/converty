@@ -7,47 +7,38 @@
 		acceptedLabel,
 		onfiles,
 		disabled = false,
-		count = 0
+		atLimit = false,
+		pdfLimit = false
 	}: {
 		accept: string;
 		acceptedLabel: string;
 		onfiles: (files: File[]) => void;
 		disabled?: boolean;
-		count?: number;
+		atLimit?: boolean;
+		pdfLimit?: boolean;
 	} = $props();
 
 	let dragging = $state(false);
 	let input = $state<HTMLInputElement | null>(null);
 
-	const atLimit = $derived(count >= LIMITS.maxFiles);
-
 	function pick(files: FileList | null) {
-		if (!files || disabled) return;
+		if (!files || disabled || atLimit) return;
 		onfiles(Array.from(files));
 		if (input) input.value = '';
 	}
-
-	function openPicker() {
-		if (!disabled && !atLimit) input?.click();
-	}
 </script>
 
-<div
+<!--
+	A native <label> wrapping the file input gives the input its accessible name
+	from the visible text, and keeps one keyboard focus stop (the input). Clicking
+	the label opens the picker without a scripted click, and Enter/Space work
+	because the underlying control is a real file input.
+-->
+<label
 	class="dropzone"
 	class:opacity-60={disabled || atLimit}
 	class:cursor-not-allowed={disabled || atLimit}
 	data-dragging={dragging}
-	role="button"
-	tabindex={disabled || atLimit ? -1 : 0}
-	aria-disabled={disabled || atLimit}
-	aria-label="Add files: {acceptedLabel}"
-	onclick={openPicker}
-	onkeydown={(event) => {
-		if (event.key === 'Enter' || event.key === ' ') {
-			event.preventDefault();
-			openPicker();
-		}
-	}}
 	ondragover={(event) => {
 		event.preventDefault();
 		if (!disabled && !atLimit) dragging = true;
@@ -66,7 +57,6 @@
 		{accept}
 		multiple
 		disabled={disabled || atLimit}
-		onclick={(event) => event.stopPropagation()}
 		onchange={(event) => pick(event.currentTarget.files)}
 	/>
 
@@ -80,13 +70,13 @@
 	<p class="t-subtitle mt-1 text-ink">
 		{atLimit ? 'Batch is full' : dragging ? 'Drop to add' : 'Drop files here'}
 	</p>
-	<p class="t-body-md text-body">
+	<p class="t-body-md text-body" aria-live="polite">
 		{#if atLimit}
-			Convert or remove a file to add more — the limit is {LIMITS.maxFiles} per batch.
+			Input size limit reached — remove files to add more.
 		{:else}
-			or <span class="font-semibold text-primary">click to browse</span>
+			or <span class="font-semibold text-primary-text">click to browse</span>
 		{/if}
 	</p>
 	<p class="t-body-sm mt-1 text-mute">{acceptedLabel}</p>
-	<p class="t-caption text-mute">{LIMIT_LINE} · PDFs up to {LIMITS.maxPdfPages} pages</p>
-</div>
+	<p class="t-caption text-mute">{LIMIT_LINE}{pdfLimit ? ` · PDFs up to ${LIMITS.maxPdfPages} pages` : ''}</p>
+</label>

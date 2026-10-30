@@ -5,8 +5,14 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="color-scheme" content="light dark" />
 		<link rel="icon" href="%sveltekit.assets%/favicon.svg" />
-		<script src="%sveltekit.assets%/theme.js"></script>
+		<!--
+			The CSP meta tag is injected by %sveltekit.head%. This script must come after
+			it: a CSP delivered by <meta> only governs content that follows, and SvelteKit
+			only hashes the scripts it injects itself. External + 'self' keeps it covered and
+			still applies the theme before the body paints.
+		-->
 		%sveltekit.head%
+		<script src="%sveltekit.assets%/theme.js"></script>
 	</head>
 	<body data-sveltekit-preload-data="hover">
 		<div style="display: contents">%sveltekit.body%</div>

@@ -18,8 +18,7 @@
 					<span class="t-subtitle text-ink">LocalConvert</span>
 				</div>
 				<p class="t-body-md mt-3 max-w-[320px] text-body">
-					File conversion that runs entirely in your browser. No uploads, no accounts, no file-size
-					paywall.
+					Files are converted in your browser, without uploading them for processing. Input size limits apply.
 				</p>
 			</div>
 
@@ -46,8 +45,7 @@
 
 		<div class="mt-10 flex flex-col gap-2 border-t border-line-strong pt-6">
 			<p class="t-caption text-mute">
-				© {year} LocalConvert. Files are processed on your device. There is no upload endpoint to
-				abuse.
+				© {year} LocalConvert. File conversion runs on your device.
 			</p>
 			<p class="t-caption text-mute">
 				Product names such as PDF, Word and Excel are trademarks of their owners and are used only

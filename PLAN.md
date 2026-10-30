@@ -1,6 +1,6 @@
 # Plan: Browser-Only File Converter (Free Tier)
 
-Status: v1 built (see §10). Round 2 planned, awaiting go-ahead (see §11). Scope after Round 2: PDF↔Word, Word→PDF, Excel→PDF, image↔image, audio↔audio, batch ≤10 files, slim tool pages.
+Status: shipped. PDF → Excel was dropped and an audio converter was added; `README.md` is the source of truth for the five current tools, limits and measured test counts.
 
 **Locked decisions (2026-10-21)**
 
@@ -314,3 +314,137 @@ Slug `audio-converter`, new waveform icon. Decode via Web Audio `decodeAudioData
 `npm run check` clean · `npm run build` static, all 6 routes prerendered · `npm run test:e2e` (updated expectations, byte-level assertions incl. the new DOCX geometry and audio round-trip) · `npm run test:design` (updated for the slimmer tool page and removed badge) · privacy invariants unchanged: no body-carrying requests, no third-party origins, CSP intact.
 
 Effort: R1 is the bulk (~a day); R2 + R3 are half a day together; R4 is ~a day including tests.
+
+---
+
+## 12. Round 3 plan — worker-based conversion + media/image family (2026-10-30)
+
+Status: implemented 2026-10-30. Shipped: worker entries per family, the image/PDF routes, and MP4/video→MP3 with a WebCodecs capability gate. Not shipped: image→PDF combine (one PDF per image), drag-to-reorder, WebM/OGG video, DOCX/XLSX→PDF in a worker (jsPDF is DOM-bound).
+
+### 12.1 Goal and non-goals
+
+**Goal.** Add audio and image sub-tools, each with its own URL and honest copy, and move CPU-heavy work off the main thread so the page never freezes — including on a low-end phone.
+
+New routes:
+
+| Family | Routes |
+|---|---|
+| Audio | `/audio-converter` (existing), `/mp3-converter`, `/mp4-to-mp3`, `/video-to-mp3` |
+| Image | `/image-converter` (existing), `/jpg-to-pdf`, `/image-to-pdf`, `/pdf-to-jpg`, `/heic-to-jpg` |
+| Documents | unchanged: `/word-to-pdf`, `/excel-to-pdf`, `/pdf-to-word` |
+
+**Non-goals.** Video *encoding* (no MP4 output), editing/merging PDFs, OCR, any server or upload endpoint. Nothing may add a request that carries file bytes.
+
+### 12.2 Verified constraints (checked in this repo, not assumed)
+
+| Fact | Evidence | Consequence |
+|---|---|---|
+| jsPDF is DOM-bound | `jspdf@4.2.1` dist references `document.createElement` ×8 and `document.body` ×8 | jsPDF cannot be assumed to run in a worker. New PDF-writing routes use a worker-safe writer; DOCX/XLSX→PDF stays on the main thread until proven otherwise. |
+| pdf.js can render off-thread | `pdfjs-dist@6.4.299` exposes `canvasFactory` (75 refs) and `OffscreenCanvas` (21 refs) | PDF→JPG can render in a worker with a custom `OffscreenCanvas` factory. pdf.js already runs parsing in its own worker. |
+| heic2any is DOM-bound | `heic2any@0.0.4` creates `<canvas>` ×3 and `<video>` ×2 | HEIC cannot move to a plain worker. `libheif-js` would work but is **LGPL-3.0** (9 MB unpacked) — avoid in a static bundle. Keep heic2any as the fallback path. |
+| MP3 encoding is not in WebCodecs | WebCodecs covers decode; encode support is codec/platform dependent | Keep `lamejs` for MP3 output; move it into the worker. |
+| WebCodecs audio decode is broad but not universal | `AudioDecoder` in Chrome/Edge, Safari 26+, Firefox 130+ desktop; AAC has platform gaps (Firefox/Linux), MP3 decode is effectively universal | MP4/video→MP3 must be capability-gated with an explicit message, never a silent failure. |
+| Worker-safe candidates | `pdf-lib@1.17.1` MIT; `mp4box@2.5.0` BSD-3-Clause | Both are acceptable. `@ffmpeg/ffmpeg`'s core is ~30 MB — reject by default. |
+| Async ZIP already available | `fflate` async `zip` is now used by `queue.zipAll()` | Multi-page PDF→JPG can be zipped inside the worker without blocking. |
+
+### 12.3 Worker architecture
+
+```
+src/lib/workers/
+  convert.worker.ts     single entry; switch on slug; dynamic import per tool
+  client.ts             WorkerClient implements Converter (queue contract unchanged)
+  protocol.ts           message types shared by both sides
+```
+
+**Contract.** `WorkerClient.run(file, ctx)` deliberately implements the existing `Converter` type, so `BatchQueue`, progress UI, retry, cancel and ZIP need no changes.
+
+| Direction | Message | Payload |
+|---|---|---|
+| main → worker | `run` | `{ id, slug, options, name, mime, bytes: ArrayBuffer }`, `bytes` **transferred** |
+| worker → main | `progress` | `{ id, value }`, throttled to ~10/s |
+| worker → main | `done` | `{ id, bytes: ArrayBuffer, mime, ext }`, **transferred** |
+| worker → main | `error` | `{ id, message }` (already user-readable) |
+
+**Rules.**
+
+- **One worker per page**, created lazily on the first Convert click, reused for every file in the batch and destroyed on navigation. Loading a page must not start a worker or pull a pipeline library.
+- **Transferables only.** `File → ArrayBuffer` on the main thread, transfer in, transfer out, build the `Blob` on the main thread. No structured-clone copies of multi-MB buffers.
+- **Cancel = `terminate()` + respawn.** Synchronous encoders (lamejs, jsPDF, pdf-lib) cannot observe an `AbortSignal` mid-loop, so cooperative cancellation would lie. Terminating is immediate, bounded, and the queue already models a cancelled job.
+- **Progress yields.** Long loops post progress every N units and `await` a macrotask so messages flush; the UI updates at ~10 Hz, never per pixel or per audio frame.
+- **Bounded memory.** One input and one output in flight. PDF→JPG renders one page at a time and appends it to an in-worker ZIP instead of holding all pages.
+- **Fallback.** If worker construction fails (old browser, CSP misconfiguration), fall back to the existing main-thread converter for tools that have one, and show a clear "not supported in this browser" state for tools that do not. Never fail silently.
+- **Prerender safety.** No `new Worker(...)` at module scope; only inside a browser-only code path. `worker-src 'self' blob:` already permits module workers.
+
+**Concurrency stays 1.** Serial conversion is what keeps peak memory predictable on phones. If image batches later feel slow, raise the pool to `min(2, hardwareConcurrency - 1)` for image tools only — measured, not guessed.
+
+### 12.4 Tool matrix
+
+| Route | In → out | Engine | Worker | Limits | Browser gate |
+|---|---|---|---|---|---|
+| `/mp3-converter` | mp3, wav, m4a, aac → mp3 | decode + lamejs | yes (encode), WebCodecs decode where available | 25 MB, 10 min | m4a/aac hidden when no `AudioDecoder` |
+| `/mp4-to-mp3` | mp4, m4v, mov → mp3 | mp4box demux + `AudioDecoder` + lamejs | yes | 100 MB, 30 min | requires AAC decode; otherwise explained refusal |
+| `/video-to-mp3` | mp4, mov, webm, ogg → mp3 | same as above | yes | 100 MB, 30 min | same gate |
+| `/audio-converter` | mp3, wav, mpeg → mp3/wav | existing, moved | encode + WAV in worker | 25 MB, 10 min | none |
+| `/jpg-to-pdf` | jpg/jpeg → PDF | `pdf-lib` (MIT) | yes | 25 MB, 50 images | none |
+| `/image-to-pdf` | png/jpg/webp → PDF, one page per image | `pdf-lib` | yes | 25 MB, 50 images | none |
+| `/pdf-to-jpg` | PDF → JPG per page (+ZIP) | pdf.js + `OffscreenCanvas` + fflate | yes | 50 pages, 16.7 MP/page | none; falls back to main thread |
+| `/heic-to-jpg` | heic/heif → jpg | `createImageBitmap` (Safari) or heic2any fallback | Safari: yes; others: no | 25 MB | explains the main-thread fallback |
+| `/image-converter` | existing | existing, moved | yes | unchanged | unchanged |
+
+Existing document tools keep their current engines. PDF→DOCX moves to the worker (pure `docx` + `fflate`). DOCX/XLSX→PDF stays on the main thread with added yield points in Phase 1; porting the 588-line jsPDF renderer is a separate decision, tracked in §12.9.
+
+Fidelity copy is mandatory per route: what is re-encoded, what is lost, and what the user should check. No "Experimental" badge returns.
+
+### 12.5 UX and information architecture
+
+- Home groups tools the way the brief does: **Audio** and **Image** columns, documents below. Each card keeps the format line and the fidelity badge.
+- One prerendered page per intent, distinct `<title>`/description, internal links between siblings (JPG→PDF ↔ Image→PDF ↔ PDF→JPG). No canonical tricks; the pages are genuinely different tasks.
+- Image→PDF uses list order as page order, with a visible `Page 1…N` label per row. Drag-to-reorder is out of scope for v1.
+- PDF→JPG exposes scale (1×/2×), quality and page range, then returns individual files or one ZIP; the existing batch UI is reused as-is.
+- While a worker runs, the page stays interactive: Stop works immediately, adding files stays disabled, progress is announced by the existing `role="status"` region.
+- Every new route must pass the existing accessibility audit (contrast, drop-zone label, 44 px targets, dark mode).
+
+### 12.6 Performance budgets (acceptance criteria)
+
+| Metric | Budget | How it is measured |
+|---|---|---|
+| Main-thread long task during conversion | p95 < 50 ms, **none > 200 ms** | `PerformanceObserver({ entryTypes: ['longtask'] })` around a batch |
+| First progress after click | < 300 ms | timestamp in the Playwright run |
+| Stop → responsive | < 100 ms | click Stop, then assert an immediate DOM update |
+| Image route initial JS | ≤ 220 KB transferred | existing per-route resource check in `test/e2e.mjs` |
+| PDF→JPG peak memory | one page canvas in flight | page-by-page render + ZIP append |
+| Bundle isolation | audio routes load no PDF libs; image→PDF routes load no pdf.js | per-route largest-resource assertion |
+
+These numbers are asserted in CI-like local runs, not just observed once. A conversion that freezes the UI is a failing test, not a tuning opportunity.
+
+### 12.7 Phases
+
+| Phase | Work | Exit criteria | Est. |
+|---|---|---|---|
+| 0. Spikes | Worker skeleton + protocol; prove (a) pdf.js render to `OffscreenCanvas`, (b) `pdf-lib` image→PDF in a worker, (c) whether jsPDF can run in a worker at all, (d) AAC decode via `AudioDecoder` in Chromium | Four short findings appended here; go/no-go per tool | 1 d |
+| 1. Runtime | `WorkerClient`, cancellation, fallback, progress; migrate image, audio, PDF→DOCX; yields in DOCX/XLSX→PDF | e2e 45/45 green, long-task budget met, Stop kills the worker | 2 d |
+| 2. Image family | `/jpg-to-pdf`, `/image-to-pdf`, `/pdf-to-jpg`, `/heic-to-jpg`; registry categories; grouped home | Each route converts its fixture and passes the a11y audit | 2 d |
+| 3. Audio family | `/mp3-converter`, `/mp4-to-mp3`, `/video-to-mp3`; capability gates; streaming decode | MP4 fixture → valid MP3; unsupported browser shows the explanation | 2.5 d |
+| 4. Polish | SEO copy, README/PLAN updates, fixtures, perf assertions, bundle budgets | Full suite + Lighthouse a11y 100 on every new route | 1.5 d |
+
+Total ≈ 9 focused days. Phase 0 is a hard gate: if pdf.js cannot render in a worker with this version, PDF→JPG ships main-thread with yields instead of blocking the team.
+
+### 12.8 Risks
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| AAC decode missing (Firefox/Linux) | MP4→MP3 unusable there | `AudioDecoder.isConfigSupported` check before queueing; explicit copy; no 30 MB WASM fallback by default |
+| jsPDF cannot run in a worker | Document tools stay janky | Keep them main-thread with yields; new PDF routes use `pdf-lib`; revisit only with a measured port plan |
+| `pdf-lib` + `mp4box` bundle weight | Slower first conversion | Lazy import per tool; per-route JS budget; no new lib on document pages |
+| Worker cancellation semantics | Half-written output | Terminate, discard the message, mark the job cancelled exactly as today |
+| Memory blow-up on 50-page PDF→JPG | Mobile OOM | One page at a time, 16.7 MP cap, ZIP appended in-worker |
+| LGPL contamination | Licence risk | Do not adopt `libheif-js`; keep MIT heic2any as fallback |
+| Duplicate-intent SEO pages | Cannibalised rankings | Distinct copy per route, cross-links, one intent per page |
+
+### 12.9 Open decisions (defaults recommended)
+
+1. **Unsupported video browsers:** refuse with a precise explanation (default) vs. an opt-in ~30 MB ffmpeg.wasm download. Recommendation: refuse; revisit only if real demand appears.
+2. **HEIC worker path:** Safari-native worker + heic2any main-thread fallback (default) vs. adopting LGPL `libheif-js`. Recommendation: fallback.
+3. **MP3 Converter input scope:** mp3/wav/m4a/aac with a capability gate (default) vs. mp3/wav only. Recommendation: gated m4a/aac.
+4. **DOCX/XLSX→PDF:** keep jsPDF main-thread (default) vs. port the renderer to `pdf-lib` for worker parity. Recommendation: defer until Phase 0 measures the actual long-task cost.
+5. **Image→PDF ordering:** list order only (default) vs. drag-to-reorder. Recommendation: list order in v1.

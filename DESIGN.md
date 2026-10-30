@@ -1,8 +1,9 @@
 ---
 name: Toss
 colors:
-  primary: "#3182f6"
-  primary-deep: "#2272eb"
+  primary: "#1a6fe0"
+  primary-deep: "#155fc4"
+  primary-text: "#1a6fe0"
   secondary: "#f2f4f6"
   background: "#ffffff"
   background-canvas: "#ffffff"
@@ -15,7 +16,7 @@ colors:
   ink: "#191f28"
   body: "#66717e"
   charcoal: "#191f28"
-  mute: "#6f7780"
+  mute: "#5f6a77"
   ash: "#333d4b"
   stone: "#4e5968"
   on-primary: "#ffffff"
@@ -33,12 +34,13 @@ colors:
   hero-pink: "#e8f3ff"
   badge-success: "#03b26c"
   badge-warning: "#fe9800"
-  badge-info: "#18a5a5"
-  link: "#3182f6"
+  badge-info: "#0c7c7c"
+  link: "#1a6fe0"
   ring-focus: "rgba(49, 130, 246, 0.5)"
 colors-dark:
-  primary: "#3182f6"
-  primary-deep: "#5a9cfa"
+  primary: "#1a6fe0"
+  primary-deep: "#155fc4"
+  primary-text: "#6aa8ff"
   secondary: "#1a1a1a"
   background: "#0a0a0a"
   background-canvas: "#0d0d0d"
@@ -54,7 +56,7 @@ colors-dark:
   mute: "#828282"
   ash: "#c8c8c8"
   stone: "#a0a0a0"
-  on-primary: "#0a0a0a"
+  on-primary: "#ffffff"
   on-secondary: "#e8e8e8"
   on-background: "#e8e8e8"
   on-surface: "#e8e8e8"
@@ -69,7 +71,7 @@ colors-dark:
   hero-pink: "#e8f3ff"
   badge-success: "#03b26c"
   badge-warning: "#fe9800"
-  badge-info: "#18a5a5"
+  badge-info: "#0c7c7c"
   link: "#5a9cfa"
   ring-focus: "rgba(49, 130, 246, 0.5)"
 typography:
@@ -530,7 +532,7 @@ Toss uses a precise, stepped radius system where each level corresponds to a spe
 - Active/Pressed: Further darkens to `#1c62c9` with `transform: scale(0.98)` for tactile feedback
 - Disabled: Opacity 0.5 using `{opacity.disabled}`, cursor not-allowed
 
-**Button Primary (Dark Mode)** — Identical bg `{colors.primary}` (`#3182f6`) with `{colors-dark.on-primary}` (`#0a0a0a`) text. Hover shifts to `#5a9cfa`.
+**Button Primary (Dark Mode)** — Identical bg `{colors.primary}` (`#1a6fe0`) with `{colors-dark.on-primary}` (`#ffffff`) text. Hover shifts to `#155fc4`. White text is used in both modes because dark text on the AA-safe blue falls below 4.5:1.
 
 **Button Secondary** — For secondary actions, cancellations, dismissals
 - Background `{colors.secondary}`, text `{colors.on-secondary}`, type `{typography.button-md}`

@@ -1,4 +1,4 @@
-import { zipSync } from 'fflate';
+import { zip } from 'fflate';
 import { outputName, uniqueName } from './format';
 import { LIMITS } from './limits';
 import type { ConvertOptions, Converter } from './types';
@@ -60,24 +60,12 @@ export class BatchQueue {
 		return this.jobs.filter((job) => job.state === 'queued').length;
 	}
 
-	get workingCount(): number {
-		return this.jobs.filter((job) => job.state === 'working').length;
-	}
-
 	get doneJobs(): Job[] {
 		return this.jobs.filter((job) => job.state === 'done' && job.result);
 	}
 
 	get errorCount(): number {
 		return this.jobs.filter((job) => job.state === 'error').length;
-	}
-
-	get cancelledCount(): number {
-		return this.jobs.filter((job) => job.state === 'cancelled').length;
-	}
-
-	get canAddMore(): boolean {
-		return this.jobs.length < LIMITS.maxFiles && !this.running;
 	}
 
 	notify(text: string, tone: Notice['tone'] = 'warning'): void {
@@ -94,18 +82,15 @@ export class BatchQueue {
 		if (this.running) {
 			this.notify('Wait for the current batch to finish before adding more files.', 'info');
 			return;
-		}
+		}		// Validate everything first, then append in one assignment: a half-validated
+		// drop cannot be started by the Convert button while files are still checked.
+		const accepted: Job[] = [];
+		let pendingBytes = this.totalBytes;
 
 		for (const file of files) {
-			if (this.jobs.length >= LIMITS.maxFiles) {
+			if (pendingBytes + file.size > LIMITS.maxTotalBytes) {
 				this.notify(
-					`Only ${LIMITS.maxFiles} files per batch. You already have ${this.jobs.length} — convert this batch first.`
-				);
-				break;
-			}
-			if (this.totalBytes + file.size > LIMITS.maxTotalBytes) {
-				this.notify(
-					`Batch size limit is ${LIMITS.maxTotalBytes / 1024 / 1024} MB. Remove a file before adding “${file.name}”.`
+					`“${file.name}” was not added. Selected input is limited to ${LIMITS.maxTotalBytes / 1024 / 1024} MB per batch; remove files or start a new batch.`
 				);
 				continue;
 			}
@@ -116,19 +101,27 @@ export class BatchQueue {
 				continue;
 			}
 
-			this.jobs = [
-				...this.jobs,
-				{
-					id: nextId(),
-					file,
-					state: 'queued',
-					progress: 0,
-					message: '',
-					result: null,
-					resultName: outputName(file.name, this.tool.outputExt)
-				}
-			];
+			pendingBytes += file.size;
+			accepted.push({
+				id: nextId(),
+				file,
+				state: 'queued',
+				progress: 0,
+				message: '',
+				result: null,
+				resultName: outputName(file.name, this.tool.outputExt)
+			});
 		}
+
+		if (accepted.length === 0) return;
+		if (this.running) {
+			this.notify(
+				'The batch started before these files finished checking. Add them again when it finishes.',
+				'info'
+			);
+			return;
+		}
+		this.jobs = [...this.jobs, ...accepted];
 	}
 
 	remove(id: string): void {
@@ -242,7 +235,14 @@ export class BatchQueue {
 			);
 		}
 
-		const zipped = zipSync(entries, { level: 6 });
-		return { blob: new Blob([zipped], { type: 'application/zip' }), name: 'converted-files.zip' };
+		// fflate's async zip runs in a worker, so a large batch does not freeze the tab
+		// and the "Zipping…" state can actually paint.
+		const zipped = await new Promise<Uint8Array>((resolve, reject) => {
+			zip(entries, { level: 6 }, (error, data) => (error ? reject(error) : resolve(data)));
+		});
+		// Copy into a fresh buffer so the type is ArrayBuffer-backed (a valid BlobPart).
+		const bytes = new Uint8Array(zipped.length);
+		bytes.set(zipped);
+		return { blob: new Blob([bytes], { type: 'application/zip' }), name: 'converted-files.zip' };
 	}
 }
