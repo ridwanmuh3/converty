@@ -10,7 +10,7 @@
 </script>
 
 <svelte:head>
-	<title>Page not found — LocalConvert</title>
+	<title>Page not found — Converty</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 

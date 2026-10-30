@@ -15,10 +15,10 @@
 					>
 						<Icon name="spark" size={18} />
 					</span>
-					<span class="t-subtitle text-ink">LocalConvert</span>
+					<span class="t-subtitle text-ink">Converty</span>
 				</div>
 				<p class="t-body-md mt-3 max-w-[320px] text-body">
-					Files are converted in your browser, without uploading them for processing. Input size limits apply.
+					Files are converted in your browser, without uploading them for processing. Size caps keep the tab within memory.
 				</p>
 			</div>
 
@@ -45,7 +45,7 @@
 
 		<div class="mt-10 flex flex-col gap-2 border-t border-line-strong pt-6">
 			<p class="t-caption text-mute">
-				© {year} LocalConvert. File conversion runs on your device.
+				© {year} Converty. File conversion runs on your device.
 			</p>
 			<p class="t-caption text-mute">
 				Product names such as PDF, Word and Excel are trademarks of their owners and are used only

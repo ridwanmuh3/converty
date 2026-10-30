@@ -1,4 +1,4 @@
-import { LIMITS } from '#lib/core/limits';
+import { LIMITS, OUTPUT } from '#lib/core/limits';
 import type { Converter } from '#lib/core/types';
 
 /**
@@ -46,7 +46,7 @@ export const convertHeic: Converter = async (file, ctx) => {
 	context.drawImage(bitmap, 0, 0, width, height);
 	bitmap.close();
 
-	const quality = Math.min(1, Math.max(0.4, Number(ctx.options.quality ?? 0.9)));
+	const quality = Math.min(1, Math.max(0.4, Number(ctx.options.quality ?? OUTPUT.jpegQuality)));
 	const blob = await new Promise<Blob>((resolve, reject) => {
 		canvas.toBlob(
 			(result) => (result ? resolve(result) : reject(new Error('The browser could not encode the photo.'))),

@@ -1,8 +1,8 @@
 import { zipSync } from 'fflate';
-import { LIMITS } from '#lib/core/limits';
+import { LIMITS, OUTPUT } from '#lib/core/limits';
 import type { Converter } from '#lib/core/types';
 
-const MAX_PAGES = 50;
+const MAX_PAGES = LIMITS.maxPdfImagePages;
 
 async function loadPdfjs() {
 	const pdfjs = await import('pdfjs-dist');
@@ -56,7 +56,7 @@ export const convertPdfToJpg: Converter = async (file, ctx) => {
 				viewport
 			}).promise;
 
-			const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 });
+			const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: OUTPUT.jpegQuality });
 			rendered[`page-${String(index).padStart(3, '0')}.jpg`] = new Uint8Array(await blob.arrayBuffer());
 			page.cleanup();
 			ctx.onProgress((index / pdf.numPages) * 0.95);

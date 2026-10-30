@@ -81,7 +81,7 @@
 </script>
 
 <svelte:head>
-	<title>{tool.name} — LocalConvert</title>
+	<title>{tool.name} — Converty</title>
 	<meta name="description" content="{tool.tagline} {tool.description} Runs in your browser; no upload." />
 </svelte:head>
 
@@ -255,7 +255,8 @@
 				{/each}
 			</ul>
 			<p class="t-caption mt-4 border-t border-line pt-3 text-mute">
-				{LIMIT_LINE}{tool.accept.includes('pdf') ? ` · ${LIMITS.maxPdfPages} pages per PDF` : ''}.
+				{LIMIT_LINE}{tool.accept.includes('pdf') ? ` · ${LIMITS.maxPdfPages} pages per PDF` : ''}. These
+				caps are enforced in this tab to stay within browser memory — they are not a server quota.
 			</p>
 		</aside>
 	</div>

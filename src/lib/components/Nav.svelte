@@ -5,13 +5,13 @@
 
 <header class="navbar">
 	<div class="mx-auto flex h-full max-w-[1200px] items-center justify-between px-5 md:px-6 lg:px-8">
-		<a href="/" class="flex items-center gap-2.5" aria-label="LocalConvert home">
+		<a href="/" class="flex items-center gap-2.5" aria-label="Converty home">
 			<span
 				class="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] bg-primary text-white"
 			>
 				<Icon name="spark" size={18} />
 			</span>
-			<span class="t-subtitle text-ink">LocalConvert</span>
+			<span class="t-subtitle text-ink">Converty</span>
 		</a>
 
 		<nav class="hidden items-center gap-6 md:flex" aria-label="Main">

@@ -15,7 +15,7 @@ export const convertDocxToPdf: Converter = async (file, ctx) => {
 		const doc = new jsPDF({ unit: 'mm', format: [firstGeo.wMm, firstGeo.hMm], compress: true });
 		doc.setProperties({
 			title: baseName(file.name),
-			creator: 'LocalConvert (local, in-browser)'
+			creator: 'Converty (local, in-browser)'
 		});
 		return doc;
 	};

@@ -1,3 +1,4 @@
+import { LIMITS, MAX_CANVAS_MEGAPIXELS, OUTPUT } from '#lib/core/limits';
 import type { Fidelity } from '#lib/core/types';
 
 export type ToolIcon = 'image' | 'word' | 'excel' | 'pdf' | 'audio';
@@ -54,7 +55,7 @@ export const TOOLS: ToolDef[] = [
 		description: 'Convert MP3, MPEG audio and WAV files to MP3 or WAV, entirely in your browser.',
 		fidelity: 'fair',
 		fidelityTitle: 'Re-encoded audio',
-		fidelityNote: 'WAV output is uncompressed PCM. MP3 output is re-encoded at 128 kbps; converting MP3 to MP3 loses quality. Metadata is not retained.',
+		fidelityNote: `WAV output is uncompressed PCM. MP3 output is re-encoded at ${OUTPUT.mp3BitrateKbps} kbps; converting MP3 to MP3 loses quality. Metadata is not retained.`,
 		accept: ['mp3', 'wav', 'mpeg'],
 		acceptAttr: '.mp3,.wav,.mpeg,audio/mpeg,audio/wav',
 		outputExt: 'mp3',
@@ -62,11 +63,11 @@ export const TOOLS: ToolDef[] = [
 		limitations: [
 			'MPEG video files are not supported — .mpeg must contain MPEG audio.',
 			'Audio decoding depends on your browser. Stereo and mono only.',
-			'Large WAV outputs may exceed memory; choose MP3 instead.'
+			'WAV output is uncompressed, so long recordings can exceed browser memory — choose MP3 instead.'
 		],
 		options: [{
 			key: 'format', label: 'Output format', type: 'select',
-			choices: [{ value: 'mp3', label: 'MP3 — 128 kbps' }, { value: 'wav', label: 'WAV — uncompressed PCM' }],
+			choices: [{ value: 'mp3', label: `MP3 — ${OUTPUT.mp3BitrateKbps} kbps` }, { value: 'wav', label: 'WAV — uncompressed PCM' }],
 			defaultValue: 'mp3'
 		}]
 	},
@@ -91,7 +92,7 @@ export const TOOLS: ToolDef[] = [
 		limitations: [
 			'Animated GIFs lose their animation — only the first frame is converted.',
 			'HEIC and AVIF can be read, but browsers cannot write them, so they are input-only.',
-			'Images above 16.7 megapixels are scaled down to fit the browser’s canvas limit.',
+			`Images above ${MAX_CANVAS_MEGAPIXELS} megapixels are scaled down, because that is the largest size a browser can decode in one piece.`,
 			'EXIF metadata such as camera and GPS data is not carried over.'
 		],
 		options: [
@@ -113,7 +114,7 @@ export const TOOLS: ToolDef[] = [
 				min: 0.5,
 				max: 1,
 				step: 0.05,
-				defaultValue: '0.9',
+				defaultValue: String(OUTPUT.jpegQuality),
 				display: 'percent',
 				hint: 'Applies to JPEG and WebP only.'
 			},
@@ -189,7 +190,7 @@ export const TOOLS: ToolDef[] = [
 		limitations: [
 			'Charts and embedded images are not rendered.',
 			'Formulas are exported as their last calculated value.',
-			'Sheets with more than 30 columns are scaled down and may be hard to read.'
+			'Wide sheets are scaled down to fit the page width, so they may be hard to read.'
 		],
 		options: [
 			{
@@ -236,17 +237,17 @@ export const TOOLS: ToolDef[] = [
 		icon: 'audio',
 		category: 'audio',
 		tagline: 'WAV and MPEG audio to MP3.',
-		description: 'Convert WAV, MPEG audio and M4A files to MP3 at 128 kbps, entirely in your browser.',
+		description: `Convert WAV, MPEG audio and M4A files to MP3 at ${OUTPUT.mp3BitrateKbps} kbps, entirely in your browser.`,
 		fidelity: 'fair',
-		fidelityTitle: 'Re-encoded at 128 kbps',
-		fidelityNote: 'MP3 output is re-encoded at 128 kbps. Converting an existing MP3 again loses quality; metadata is not retained.',
+		fidelityTitle: `Re-encoded at ${OUTPUT.mp3BitrateKbps} kbps`,
+		fidelityNote: `MP3 output is re-encoded at ${OUTPUT.mp3BitrateKbps} kbps. Converting an existing MP3 again loses quality; metadata is not retained.`,
 		accept: ['mp3', 'wav', 'm4a', 'mpeg'],
 		acceptAttr: '.mp3,.wav,.m4a,.mpeg,audio/mpeg,audio/wav,audio/mp4',
 		outputExt: 'mp3',
 		outputLabel: 'MP3',
 		limitations: [
-			'Output is always MP3 at 128 kbps — use the Audio Converter to choose WAV.',
-			'Audio is limited to 10 minutes and 200 MB decoded.',
+			`Output is always MP3 at ${OUTPUT.mp3BitrateKbps} kbps — use the Audio Converter to choose WAV.`,
+			`Audio is capped at ${LIMITS.maxAudioSeconds / 60} minutes and ${LIMITS.maxDecodedAudioBytes / 1024 / 1024} MB once decoded, because longer audio would use more memory than the tab has.`,
 			'M4A input depends on the browser’s AAC decoder.'
 		],
 		options: []
@@ -261,15 +262,15 @@ export const TOOLS: ToolDef[] = [
 		description: 'Extract the audio track from an MP4 or MOV file and save it as MP3, without uploading the video.',
 		fidelity: 'fair',
 		fidelityTitle: 'Audio only, re-encoded',
-		fidelityNote: 'Video is discarded. The audio track is decoded and re-encoded at 128 kbps; metadata and multi-channel audio are not preserved.',
+		fidelityNote: `Video is discarded. The audio track is decoded and re-encoded at ${OUTPUT.mp3BitrateKbps} kbps; metadata and multi-channel audio are not preserved.`,
 		accept: ['mp4', 'm4v', 'mov', 'm4a'],
 		acceptAttr: '.mp4,.m4v,.mov,.m4a,video/mp4,video/quicktime,audio/mp4',
 		outputExt: 'mp3',
 		outputLabel: 'MP3',
 		limitations: [
 			'Only the audio track is used — there is no video output.',
-			'This browser must support decoding the audio codec (WebCodecs). Chrome, Edge and recent Safari work; AAC may be unavailable in some Firefox builds.',
-			'Clips are limited to 25 MB and 30 minutes.'
+			'The browser has to decode the clip’s audio itself. Chrome, Edge and recent Safari work; AAC audio may be unavailable in some Firefox builds.',
+			`Clips are capped at ${LIMITS.maxFileBytes / 1024 / 1024} MB and ${LIMITS.maxVideoSeconds / 60} minutes so decoding stays within browser memory.`
 		],
 		options: []
 	},
@@ -283,7 +284,7 @@ export const TOOLS: ToolDef[] = [
 		description: 'Turn the audio of an MP4, M4V or MOV clip into MP3. The video never leaves your device and is not re-encoded.',
 		fidelity: 'fair',
 		fidelityTitle: 'Audio only, re-encoded',
-		fidelityNote: 'The video stream is dropped without decoding it. Audio is re-encoded at 128 kbps, so quality is not bit-identical; metadata is not kept.',
+		fidelityNote: `The video stream is dropped without decoding it. Audio is re-encoded at ${OUTPUT.mp3BitrateKbps} kbps, so quality is not bit-identical; metadata is not kept.`,
 		accept: ['mp4', 'm4v', 'mov'],
 		acceptAttr: '.mp4,.m4v,.mov,video/mp4,video/quicktime',
 		outputExt: 'mp3',
@@ -291,7 +292,7 @@ export const TOOLS: ToolDef[] = [
 		limitations: [
 			'MP4/MOV containers only — WebM and OGG video are not supported.',
 			'The browser must decode the clip’s audio codec; otherwise the file is refused with an explanation.',
-			'Clips are limited to 25 MB and 30 minutes.'
+			`Clips are capped at ${LIMITS.maxFileBytes / 1024 / 1024} MB and ${LIMITS.maxVideoSeconds / 60} minutes so decoding stays within browser memory.`
 		],
 		options: []
 	},
@@ -312,7 +313,7 @@ export const TOOLS: ToolDef[] = [
 		outputLabel: 'PDF',
 		limitations: [
 			'Each image becomes a separate PDF — use Image to PDF for multi-page output per file.',
-			'PDF page size is fixed at conversion time; margins are 24 pt on A4 and Letter.',
+			`PDF page size is fixed at conversion time; margins are ${OUTPUT.pdfMarginPt} pt on A4 and Letter.`,
 			'EXIF orientation stored by cameras is not applied.'
 		],
 		options: [
@@ -373,14 +374,14 @@ export const TOOLS: ToolDef[] = [
 		description: 'Render every page of a PDF to a JPEG. One page returns a JPG; longer documents return a ZIP of numbered pages.',
 		fidelity: 'good',
 		fidelityTitle: 'Rendered pages',
-		fidelityNote: 'Pages are rasterised at 72 dpi (or 144 dpi), so text becomes pixels. Rendering happens on an offscreen canvas without freezing the page.',
+		fidelityNote: `Pages are rasterised at ${OUTPUT.pdfRenderDpi} dpi (or ${OUTPUT.pdfRenderDpi * 2} dpi), so text becomes pixels. Rendering happens one page at a time, so progress is visible.`,
 		accept: ['pdf'],
 		acceptAttr: '.pdf,application/pdf',
 		outputExt: 'jpg',
 		outputLabel: 'JPG',
 		limitations: [
 			'Text is no longer selectable — this is an image export, not a text extraction.',
-			'60 pages maximum; longer documents are refused rather than silently truncated.',
+			`${LIMITS.maxPdfImagePages} pages maximum. Every page is held in memory as an image, so longer documents are refused rather than silently truncated.`,
 			'Password-protected PDFs cannot be opened in the browser.'
 		],
 		options: [
@@ -389,8 +390,8 @@ export const TOOLS: ToolDef[] = [
 				label: 'Resolution',
 				type: 'select',
 				choices: [
-					{ value: '1', label: 'Standard — 72 dpi' },
-					{ value: '2', label: 'High — 144 dpi' }
+					{ value: '1', label: `Standard — ${OUTPUT.pdfRenderDpi} dpi` },
+					{ value: '2', label: `High — ${OUTPUT.pdfRenderDpi * 2} dpi` }
 				],
 				defaultValue: '1'
 			}
@@ -406,17 +407,17 @@ export const TOOLS: ToolDef[] = [
 		description: 'Convert HEIC and HEIF photos from an iPhone or iPad into JPEG, without uploading them.',
 		fidelity: 'fair',
 		fidelityTitle: 'Re-encoded JPEG',
-		fidelityNote: 'The HEIC image is decoded and re-encoded as JPEG at 90% quality. Metadata such as camera, location and depth data is not carried over.',
+		fidelityNote: `The HEIC image is decoded and re-encoded as JPEG at ${Math.round(OUTPUT.jpegQuality * 100)}% quality. Metadata such as camera, location and depth data is not carried over.`,
 		accept: ['heic', 'heif'],
 		acceptAttr: '.heic,.heif,image/heic,image/heif',
 		outputExt: 'jpg',
 		outputLabel: 'JPG',
 		limitations: [
-			'Decoding uses a WebAssembly HEIC decoder on the main thread, so large photos can take a moment.',
+			'Large HEIC photos can take a moment to decode, and the tab may feel busy until it finishes.',
 			'Live Photos and multi-image HEIC files convert the primary image only.',
 			'EXIF orientation and location data are dropped.'
 		],
-		fixedOptions: { format: 'jpeg', quality: '0.9' },
+		fixedOptions: { format: 'jpeg', quality: String(OUTPUT.jpegQuality) },
 		options: []
 	}
 ];

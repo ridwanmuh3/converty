@@ -6,10 +6,10 @@
 		<meta name="color-scheme" content="light dark" />
 		<link rel="icon" href="%sveltekit.assets%/favicon.svg" />
 		<!--
-			The CSP meta tag is injected by %sveltekit.head%. This script must come after
-			it: a CSP delivered by <meta> only governs content that follows, and SvelteKit
-			only hashes the scripts it injects itself. External + 'self' keeps it covered and
-			still applies the theme before the body paints.
+			SvelteKit injects the CSP meta tag at the head placeholder below. This script
+			must come after it: a CSP delivered by <meta> only governs content that
+			follows, and SvelteKit only hashes the scripts it injects itself. External +
+			'self' keeps it covered and still applies the theme before the body paints.
 		-->
 		%sveltekit.head%
 		<script src="%sveltekit.assets%/theme.js"></script>

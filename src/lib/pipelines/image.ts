@@ -1,5 +1,5 @@
 import { extensionOf } from '#lib/core/format';
-import { LIMITS } from '#lib/core/limits';
+import { LIMITS, OUTPUT } from '#lib/core/limits';
 import type { Converter } from '#lib/core/types';
 
 const MIME: Record<string, string> = {
@@ -89,7 +89,7 @@ function toBlob(canvas: Canvas, mime: string, quality: number): Promise<Blob> {
 export const convertImage: Converter = async (file, ctx) => {
 	const format = ctx.options.format ?? 'png';
 	const mime = MIME[format] ?? 'image/png';
-	const quality = Math.min(1, Math.max(0.4, Number(ctx.options.quality ?? 0.9)));
+	const quality = Math.min(1, Math.max(0.4, Number(ctx.options.quality ?? OUTPUT.jpegQuality)));
 	const maxWidth = Number(ctx.options.maxWidth ?? 0);
 
 	ctx.onProgress(0.08);

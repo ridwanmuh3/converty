@@ -1,7 +1,8 @@
 import { createFile } from 'mp4box';
+import { LIMITS, OUTPUT } from '#lib/core/limits';
 import type { Converter } from '#lib/core/types';
 
-const MAX_SECONDS = 30 * 60;
+const MAX_SECONDS = LIMITS.maxVideoSeconds;
 const FRAME_CHUNK = 1152;
 
 /**
@@ -107,7 +108,7 @@ export const convertVideoToMp3: Converter = async (file, ctx) => {
 		const sampleRate = track.audio.sample_rate;
 		const codec = normalizeCodec(track.codec);
 
-		state.encoder = new Mp3Encoder(channels, sampleRate, 128);
+		state.encoder = new Mp3Encoder(channels, sampleRate, OUTPUT.mp3BitrateKbps);
 		state.decoder = new AudioDecoder({
 			output: (data) => {
 				const frames = data.numberOfFrames;

@@ -72,11 +72,13 @@
 	</p>
 	<p class="t-body-md text-body" aria-live="polite">
 		{#if atLimit}
-			Input size limit reached — remove files to add more.
+			Browser memory cap reached — remove files to add more.
 		{:else}
 			or <span class="font-semibold text-primary-text">click to browse</span>
 		{/if}
 	</p>
 	<p class="t-body-sm mt-1 text-mute">{acceptedLabel}</p>
-	<p class="t-caption text-mute">{LIMIT_LINE}{pdfLimit ? ` · PDFs up to ${LIMITS.maxPdfPages} pages` : ''}</p>
+	<p class="t-caption text-mute">
+		Browser memory caps: {LIMIT_LINE}{pdfLimit ? ` · PDFs up to ${LIMITS.maxPdfPages} pages` : ''}
+	</p>
 </label>

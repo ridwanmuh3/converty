@@ -1,8 +1,9 @@
+import { LIMITS, OUTPUT } from '#lib/core/limits';
 import type { Converter } from '#lib/core/types';
 
 /** A 25 MB MP3 can decode into hundreds of MB of PCM; cap both duration and memory. */
-const MAX_AUDIO_SECONDS = 10 * 60;
-const MAX_DECODED_BYTES = 200 * 1024 * 1024;
+const MAX_AUDIO_SECONDS = LIMITS.maxAudioSeconds;
+const MAX_DECODED_BYTES = LIMITS.maxDecodedAudioBytes;
 
 function pcm(samples: Float32Array): Int16Array {
 	const output = new Int16Array(samples.length);
@@ -83,7 +84,7 @@ export const convertAudio: Converter = async (file, ctx) => {
 		}
 		const { Mp3Encoder } = await import('@breezystack/lamejs');
 		const channels = decoded.numberOfChannels;
-		const encoder = new Mp3Encoder(channels, decoded.sampleRate, 128);
+		const encoder = new Mp3Encoder(channels, decoded.sampleRate, OUTPUT.mp3BitrateKbps);
 		const left = decoded.getChannelData(0);
 		const right = channels === 2 ? decoded.getChannelData(1) : undefined;
 		const chunks: BlobPart[] = [];

@@ -1,8 +1,9 @@
 import { baseName } from '#lib/core/format';
+import { LIMITS } from '#lib/core/limits';
 import type { Converter } from '#lib/core/types';
 import { assertLatin } from './pdf-text';
 
-const MAX_ROWS_PER_SHEET = 5000;
+const MAX_ROWS_PER_SHEET = LIMITS.maxSpreadsheetRows;
 
 export const convertXlsxToPdf: Converter = async (file, ctx) => {
 	const XLSX = await import('xlsx');

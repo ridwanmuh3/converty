@@ -1,4 +1,4 @@
-# LocalConvert
+# Converty
 
 Twelve file converters that run entirely in the browser. No upload endpoint, no accounts, no ads.
 
@@ -17,7 +17,7 @@ Twelve file converters that run entirely in the browser. No upload endpoint, no 
 | Excel → PDF | `/excel-to-pdf` | Good for tables |
 | PDF → Word | `/pdf-to-word` | Text first, layout second |
 
-No file-count cap. 25 MB per file, 100 MB of input per batch, 200 pages per PDF, 60 pages for PDF → JPG, 10 minutes for audio and 30 minutes for video-to-MP3.
+No file-count cap. The caps are client-side, sized to browser memory rather than a server quota: 25 MB per file, 100 MB of input per batch, 200 pages per PDF, 50 pages for PDF → JPG, 10 minutes for audio and 30 minutes for video-to-MP3. Decoded data can need several times the input size, which is why the ceilings are conservative.
 
 ## Stack
 
@@ -51,7 +51,7 @@ npm run test:design # token, contrast, touch-target, overflow and dark-mode audi
 | PDF → DOCX | pdf.js text positions → line/paragraph heuristics → `docx` | Images, tables (become paragraphs), fonts, columns |
 | Audio | `AudioContext` decode → 16-bit PCM WAV, or lamejs MP3 at 128 kbps | Metadata, clips over 10 minutes, more than two channels |
 | JPG/PNG/WebP → PDF | `pdf-lib` embeds the image; page is A4, Letter or matched to the image | EXIF orientation; one PDF per image |
-| PDF → JPG | pdf.js renders each page to an `OffscreenCanvas`, then JPEG (ZIP when more than one page) | Text becomes pixels; 60 pages maximum |
+| PDF → JPG | pdf.js renders each page to an `OffscreenCanvas`, then JPEG (ZIP when more than one page) | Text becomes pixels; 50 pages maximum |
 | MP4/MOV → MP3 | mp4box demuxes the audio track, WebCodecs decodes it, lamejs encodes 128 kbps | Video stream, metadata, browsers without the audio codec |
 
 **Why jsPDF instead of the browser print dialog.** The plan originally used `window.print()` for DOCX/XLSX → PDF. Print produces slightly nicer typography but is interactive: it cannot batch, cannot ZIP, and cannot report per-file progress. Since batching was a hard requirement, the pipeline re-lays-out the document with jsPDF and returns a real Blob. The trade-off is that jsPDF's built-in fonts are WinAnsi-only, so non-Latin text is **rejected with an explanation** instead of being silently corrupted.
@@ -73,7 +73,7 @@ Cloudflare Pages: build command `npm run build`, output directory `build`. The `
 - PDF output (DOCX/XLSX → PDF) is Latin-script only.
 - Audio is capped at 10 minutes and 200 MB decoded; video audio is capped at 30 minutes. MP3 output is re-encoded at 128 kbps, so MP3 → MP3 loses quality.
 - Video audio extraction needs WebCodecs decode support for the clip's codec; unsupported browsers are told, not silently given a broken file.
-- PDF → JPG rasterises text and stops at 60 pages.
+- PDF → JPG rasterises text and stops at 50 pages.
 - HEIC is decoded with heic2any on the main thread, so the HEIC route is not covered by the worker path.
 - Image → PDF creates one PDF per image; combining several images into one file is not supported yet.
 - Images above 16.7 megapixels are scaled down to fit the browser canvas limit, and the page says so.

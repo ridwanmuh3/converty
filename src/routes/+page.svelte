@@ -64,8 +64,8 @@
 		},
 		{
 			icon: 'file',
-			title: 'Input size limits',
-			body: 'Files are limited to 25 MB each and 100 MB of input per batch. Decoded files can use more memory.'
+			title: 'Why there are size caps',
+			body: `Each file is capped at ${LIMITS.maxFileBytes / 1024 / 1024} MB and each batch at ${LIMITS.maxTotalBytes / 1024 / 1024} MB of input. These caps keep the tab inside its memory budget on your device; they are not a server quota. A bigger file may work on a stronger machine, but is refused here rather than crashing the tab.`
 		}
 	];
 
@@ -92,16 +92,16 @@
 		},
 		{
 			q: 'How many files can I convert together?',
-			a: 'There is no file-count cap. Input is limited to 25 MB per file and 100 MB per batch. Files are converted one at a time, but output and decoded data may use more memory than input size.'
+			a: `There is no file-count cap. Each file is capped at ${LIMITS.maxFileBytes / 1024 / 1024} MB and each batch at ${LIMITS.maxTotalBytes / 1024 / 1024} MB of input. Those numbers are client-side caps that keep the tab within browser memory, not a server quota, so they apply the same on every device. Files are converted one at a time, and decoded data can need several times the input size.`
 		}
 	];
 </script>
 
 <svelte:head>
-	<title>LocalConvert — convert audio, PDF, Word, Excel and images in your browser</title>
+	<title>Converty — convert audio, PDF, Word, Excel and images in your browser</title>
 	<meta
 		name="description"
-		content="Convert MP3, WAV, MPEG audio, PDF, Word, Excel and images in your browser. Input limit: 25 MB per file, 100 MB per batch."
+		content="Convert MP3, WAV, MPEG audio, PDF, Word, Excel and images in your browser. No uploads, no account, nothing to install."
 	/>
 </svelte:head>
 
@@ -133,9 +133,6 @@
 				<ul class="t-body-sm mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-body">
 					<li class="flex items-center gap-1.5">
 						<Icon name="check" size={16} /> Files processed one at a time
-					</li>
-					<li class="flex items-center gap-1.5">
-						<Icon name="check" size={16} /> {LIMITS.maxFileBytes / 1024 / 1024} MB per file
 					</li>
 					<li class="flex items-center gap-1.5">
 						<Icon name="check" size={16} /> No account, no watermark
@@ -262,9 +259,9 @@
 	<section id="limits" class="scroll-mt-20 border-y border-line bg-bone">
 		<div class="mx-auto max-w-[1200px] px-5 py-16 md:px-6 md:py-24 lg:px-8">
 			<div class="max-w-[620px]">
-				<h2 class="t-display-lg text-ink">Limits you can plan around</h2>
+				<h2 class="t-display-lg text-ink">Why these limits exist</h2>
 				<p class="t-body-lg mt-2 text-body">
-					Input limits reduce memory pressure. Decoded images, audio and output files can use more memory than their inputs.
+					Conversion runs in this tab, so the caps come from your device’s memory budget, not from a server. Decoded images, audio and output files can need several times their input size, so the ceilings below keep the tab from running out of memory.
 				</p>
 			</div>
 
@@ -273,13 +270,15 @@
 					<p class="t-display-lg tabular text-ink">{LIMITS.maxFileBytes / 1024 / 1024} MB</p>
 					<p class="t-body-md mt-1 text-body">per file</p>
 					<p class="t-body-sm mt-2 text-mute">
-						{LIMITS.maxTotalBytes / 1024 / 1024} MB total across the batch.
+						{LIMITS.maxTotalBytes / 1024 / 1024} MB of input across one batch. Enforced in the browser, so it applies on every device.
 					</p>
 				</div>
 				<div class="card p-6">
 					<p class="t-display-lg tabular text-ink">{LIMITS.maxPdfPages}</p>
 					<p class="t-body-md mt-1 text-body">pages per PDF</p>
-					<p class="t-body-sm mt-2 text-mute">Applies to PDF inputs. Longer files are rejected.</p>
+					<p class="t-body-sm mt-2 text-mute">
+						Applies to PDF inputs. Longer files are refused before rendering rather than exhausting memory.
+					</p>
 				</div>
 			</div>
 		</div>

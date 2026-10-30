@@ -1,4 +1,5 @@
 import { extensionOf } from '#lib/core/format';
+import { OUTPUT } from '#lib/core/limits';
 import type { Converter } from '#lib/core/types';
 
 const PAGE: Record<string, [number, number]> = {
@@ -30,13 +31,13 @@ export const convertImageToPdf: Converter = async (file, ctx) => {
 	const source = await embeddable(file);
 	const pdf = await PDFDocument.create();
 	pdf.setTitle(file.name.replace(/\.[^.]+$/, ''));
-	pdf.setCreator('LocalConvert (local, in-browser)');
+	pdf.setCreator('Converty (local, in-browser)');
 	const embedded = source.type === 'jpg' ? await pdf.embedJpg(source.bytes) : await pdf.embedPng(source.bytes);
 
 	const mode = ctx.options.pageSize ?? 'a4';
 	let pageWidth: number;
 	let pageHeight: number;
-	let margin = 24;
+	let margin: number = OUTPUT.pdfMarginPt;
 
 	if (mode === 'fit') {
 		// A page that matches the image, capped to a printable size at 72 dpi.
