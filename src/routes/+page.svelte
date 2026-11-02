@@ -1,10 +1,12 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import Footer from '#lib/components/Footer.svelte';
 	import FidelityBadge from '#lib/components/FidelityBadge.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Nav from '#lib/components/Nav.svelte';
 	import type { IconName } from '#lib/components/icon-names';
 	import { LIMITS } from '#lib/core/limits';
+	import { SITE_ORIGIN } from '#lib/core/site';
 	import { TOOLS, type ToolCategory, type ToolDef } from '#lib/tools/registry';
 
 	const groups: { id: ToolCategory; label: string; blurb: string; tools: ToolDef[] }[] = [
@@ -69,6 +71,12 @@
 		}
 	];
 
+	/** Canonical and og:url share one value: the base-prefixed site root. */
+	const canonicalUrl = (() => {
+		const root = resolve('/');
+		return `${SITE_ORIGIN}${root.endsWith('/') ? root : `${root}/`}`;
+	})();
+
 	const faqs: { q: string; a: string }[] = [
 		{
 			q: 'Are my files uploaded?',
@@ -103,6 +111,16 @@
 		name="description"
 		content="Convert MP3, WAV, MPEG audio, PDF, Word, Excel and images in your browser. No uploads, no account, nothing to install."
 	/>
+	<link rel="canonical" href={canonicalUrl} />
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="Converty" />
+	<meta property="og:title" content="Converty — convert audio, PDF, Word, Excel and images in your browser" />
+	<meta
+		property="og:description"
+		content="Convert MP3, WAV, MPEG audio, PDF, Word, Excel and images in your browser. No uploads, no account, nothing to install."
+	/>
+	<meta property="og:url" content={canonicalUrl} />
+	<meta name="twitter:card" content="summary" />
 </svelte:head>
 
 <Nav />
@@ -163,7 +181,7 @@
 							{#each group.tools as tool}
 								<li>
 									<a
-										href="/{tool.slug}"
+										href={`${resolve('/')}${tool.slug}`}
 										class="card flex h-full flex-col gap-4 p-6 transition hover:border-line-strong hover:shadow-[var(--shadow-2)]"
 									>
 										<div class="flex items-start justify-between gap-3">

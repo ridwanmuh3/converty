@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { TOOLS } from '#lib/tools/registry';
 	import Icon from './Icon.svelte';
 
@@ -27,7 +28,7 @@
 				<ul class="mt-3 space-y-2">
 					{#each TOOLS as tool}
 						<li>
-							<a class="t-body-sm text-body hover:text-ink" href="/{tool.slug}">{tool.name}</a>
+							<a class="t-body-sm text-body hover:text-ink" href={`${resolve('/')}${tool.slug}`}>{tool.name}</a>
 						</li>
 					{/each}
 				</ul>
@@ -36,9 +37,9 @@
 			<div>
 				<h2 class="t-body-sm font-semibold text-ink">Good to know</h2>
 				<ul class="mt-3 space-y-2">
-					<li><a class="t-body-sm text-body hover:text-ink" href="/#privacy">Privacy</a></li>
-					<li><a class="t-body-sm text-body hover:text-ink" href="/#limits">Limits</a></li>
-					<li><a class="t-body-sm text-body hover:text-ink" href="/#faq">FAQ</a></li>
+				<li><a class="t-body-sm text-body hover:text-ink" href={resolve('/#privacy')}>Privacy</a></li>
+				<li><a class="t-body-sm text-body hover:text-ink" href={resolve('/#limits')}>Limits</a></li>
+				<li><a class="t-body-sm text-body hover:text-ink" href={resolve('/#faq')}>FAQ</a></li>
 				</ul>
 			</div>
 		</div>

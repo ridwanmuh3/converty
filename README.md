@@ -36,10 +36,12 @@ npm run preview    # serve ./build with clean URLs (test/serve.mjs)
 npm run check      # svelte-check + TypeScript
 npm run fixtures   # generate test/fixtures
 npm run test:e2e    # Chromium end-to-end conversions (53 checks)
-npm run test:design # token, contrast, touch-target, overflow and dark-mode audit (101 checks)
+npm run test:design # tokens, contrast, touch targets, overflow, dark mode + Lighthouse-style page perf & SEO audit (243 checks)
 ```
 
 `test:e2e` needs Chromium. Set `CHROME_PATH` if it is not at `/usr/bin/chromium-browser`.
+
+The design audit's Lighthouse-style section scans all 13 pages for SEO head hygiene (title and description length, canonical, Open Graph, indexability, viewport, lang, a single h1, favicon, image alt text) and runs Core Web Vitals on the two page shapes with 'good'-band thresholds: paint metrics under 2.5 s, CLS under 0.1, and budgets of 40 requests, 500 KB transferred and 350 KB of script per page.
 
 ## How the conversions actually work
 
@@ -65,7 +67,9 @@ npm run test:design # token, contrast, touch-target, overflow and dark-mode audi
 
 ## Deploy
 
-Cloudflare Pages: build command `npm run build`, output directory `build`. The `static/_headers` file adds HSTS-friendly security headers and immutable asset caching. It works on the free `*.pages.dev` URL; a custom domain is optional and only costs the domain.
+**GitHub Pages (primary).** Every push to `main` builds in `.github/workflows/deploy.yml` and deploys via the `github-pages` environment. One-time setup: repo Settings → Pages → Source **GitHub Actions**. The site lives at `/converty/` on the free `*.github.io` domain; to serve at a custom root instead, override `BASE_PATH` (empty string for apex) in the workflow's build step. `static/.nojekyll` keeps the `_app/` asset directory public, and the build copies `404/index.html` to `404.html` so unknown routes serve the prerendered not-found page.
+
+Cloudflare Pages also works: build command `npm run build`, output directory `build`. The `static/_headers` file adds HSTS-friendly security headers and immutable asset caching there; GitHub Pages ignores it.
 
 ## Known limitations
 

@@ -1,6 +1,11 @@
+/**
+ * Names allowed on the Icon component's `name` prop. Kept in sync with the
+ * `paths` record in src/lib/components/Icon.svelte — every key below must have
+ * an entry there and vice versa.
+ */
 export type IconName =
-	| 'image'
 	| 'audio'
+	| 'image'
 	| 'word'
 	| 'excel'
 	| 'pdf'

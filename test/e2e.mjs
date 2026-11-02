@@ -6,7 +6,8 @@ import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { unzipSync } from 'fflate';
 import { startServer } from './serve.mjs';
 
-const BASE = 'http://localhost:4173';
+const paths = (process.env.BASE_PATH ?? '').replace(/\/+$/, '');
+const BASE = `http://localhost:4173${paths}`;
 const FIXTURES = join(process.cwd(), 'test', 'fixtures');
 const OUT = join(process.cwd(), 'test', 'out');
 const CHROME = process.env.CHROME_PATH ?? '/usr/bin/chromium-browser';

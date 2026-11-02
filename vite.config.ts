@@ -4,6 +4,10 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
+// GitHub Pages serves a project site at https://<user>.github.io/<repo>/, so a
+// subfolder base is required. Override with BASE_PATH for a custom apex domain.
+const basePath = (process.env.BASE_PATH ?? '/converty') as '' | `/${string}`;
+
 export default defineConfig(async () => ({
 	plugins: [
 		tailwindcss(),
@@ -11,7 +15,7 @@ export default defineConfig(async () => ({
 			preprocess: vitePreprocess(),
 			adapter: adapter({ pages: 'build', assets: 'build', strict: true }),
 			// Absolute asset URLs survive trailing-slash and clean-URL rewrites at the edge.
-			paths: { relative: false },
+			paths: { base: basePath, relative: false },
 			csp: {
 				mode: 'hash',
 				directives: {

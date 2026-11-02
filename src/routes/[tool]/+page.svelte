@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { untrack } from 'svelte';
 	import Footer from '#lib/components/Footer.svelte';
 	import DropZone from '#lib/components/DropZone.svelte';
@@ -11,6 +12,7 @@
 	import { downloadBlob } from '#lib/core/download';
 	import { formatBytes } from '#lib/core/format';
 	import { LIMITS, LIMIT_LINE } from '#lib/core/limits';
+	import { SITE_ORIGIN } from '#lib/core/site';
 	import { BatchQueue, type Job } from '#lib/core/queue.svelte';
 	import type { ConvertOptions } from '#lib/core/types';
 	import { loadConverter, WORKER_SLUGS } from '#lib/pipelines';
@@ -20,6 +22,13 @@
 	let { data }: { data: { tool: ToolDef } } = $props();
 	// Route data is fixed for the lifetime of this page; read it once, outside reactivity.
 	const tool = untrack(() => data.tool);
+
+	/** Canonical and og:url share one value: the base-prefixed tool path. */
+	const canonicalUrl = (() => {
+		const root = resolve('/');
+		const baseDir = root.endsWith('/') ? root : `${root}/`;
+		return `${SITE_ORIGIN}${baseDir}${tool.slug}/`;
+	})();
 
 	let options = $state<ConvertOptions>({
 		...(tool.fixedOptions ?? {}),
@@ -83,13 +92,23 @@
 <svelte:head>
 	<title>{tool.name} — Converty</title>
 	<meta name="description" content="{tool.tagline} {tool.description} Runs in your browser; no upload." />
+	<link rel="canonical" href={canonicalUrl} />
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="Converty" />
+	<meta property="og:title" content="{tool.name} — Converty" />
+	<meta
+		property="og:description"
+		content="{tool.tagline} {tool.description} Runs in your browser; no upload."
+	/>
+	<meta property="og:url" content={canonicalUrl} />
+	<meta name="twitter:card" content="summary" />
 </svelte:head>
 
 <Nav />
 
 <main id="main" class="mx-auto max-w-[1200px] px-5 py-8 md:px-6 md:py-12 lg:px-8">
 	<nav aria-label="Breadcrumb" class="t-body-sm">
-		<a href="/" class="inline-flex items-center gap-1.5 text-body hover:text-ink">
+		<a href={resolve('/')} class="inline-flex items-center gap-1.5 text-body hover:text-ink">
 			<span aria-hidden="true">←</span> All converters
 		</a>
 	</nav>

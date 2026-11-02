@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import Footer from './Footer.svelte';
 	import Icon from './Icon.svelte';
 	import Nav from './Nav.svelte';
@@ -22,11 +23,11 @@
 	<p class="t-body-lg mt-2 max-w-[560px] text-body">{message}</p>
 
 	<div class="mt-6 flex flex-wrap gap-3">
-		<a href="/" class="btn btn-primary">
+		<a href={resolve('/')} class="btn btn-primary">
 			Choose a converter
 			<Icon name="arrow-right" size={18} />
 		</a>
-		<a href="/#faq" class="btn btn-secondary">Read the FAQ</a>
+		<a href={resolve('/#faq')} class="btn btn-secondary">Read the FAQ</a>
 	</div>
 </main>
 

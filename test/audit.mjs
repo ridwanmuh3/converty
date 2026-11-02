@@ -1,7 +1,7 @@
 import { chromium } from 'playwright-core';
 import { startServer } from './serve.mjs';
 
-const BASE = 'http://localhost:4175';
+const BASE = `http://localhost:4175${(process.env.BASE_PATH ?? '').replace(/\/+$/, '')}`;
 const server = await startServer(4175);
 const browser = await chromium.launch({
 	executablePath: process.env.CHROME_PATH ?? '/usr/bin/chromium-browser',
@@ -273,6 +273,123 @@ for (const slug of [
 	check('converter/mobile: wrong file type is rejected, not queued', state.queued === 0 && state.notices >= 3, `${state.queued} queued / ${state.notices} notices`);
 	await page.close();
 }
+
+// ---------- Lighthouse-style page performance & SEO ----------
+const SITE_ORIGIN = 'https://ridwanmuh3.github.io';
+const BASE_DIR = (process.env.BASE_PATH ?? '/converty').replace(/\/+$/, '');
+const SEO_PATHS = [
+	'',
+	'audio-converter/',
+	'image-converter/',
+	'jpg-to-pdf/',
+	'image-to-pdf/',
+	'pdf-to-jpg/',
+	'heic-to-jpg/',
+	'word-to-pdf/',
+	'excel-to-pdf/',
+	'pdf-to-word/',
+	'mp3-converter/',
+	'mp4-to-mp3/',
+	'video-to-mp3/'
+];
+
+/**
+ * Head scan for every page: title, description, canonical, social preview,
+ * indexability, viewport, lang, single h1 and image alt coverage.
+ */
+{
+	const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+	for (const path of SEO_PATHS) {
+		const key = path || 'home';
+		await page.goto(`${BASE}/${path}`, { waitUntil: 'domcontentloaded' });
+		const head = await page.evaluate(() => {
+			const content = (selector) => document.querySelector(selector)?.content ?? '';
+			return {
+				title: document.title,
+				description: content('meta[name="description"]'),
+				canonical: document.querySelector('link[rel="canonical"]')?.href ?? '',
+				ogTitle: content('meta[property="og:title"]'),
+				ogDescription: content('meta[property="og:description"]'),
+				ogUrl: content('meta[property="og:url"]'),
+				robots: content('meta[name="robots"]'),
+				viewport: content('meta[name="viewport"]'),
+				lang: document.documentElement.lang,
+				h1s: document.querySelectorAll('h1').length,
+				favicon: Boolean(document.querySelector('link[rel="icon"]')),
+				imagesWithoutAlt: [...document.querySelectorAll('img')].filter((image) => !image.alt).map((image) => image.src)
+			};
+		});
+		check(`seo/${key}: title is descriptive and short`, head.title.length >= 15 && head.title.length <= 70, `${head.title.length} chars`);
+		check(`seo/${key}: description within 50–200`, head.description.length >= 50 && head.description.length <= 200, `${head.description.length} chars`);
+		check(
+			`seo/${key}: canonical points at the published URL`,
+			head.canonical === `${SITE_ORIGIN}${BASE_DIR}/${path}`,
+			head.canonical || '(missing)'
+		);
+		check(
+			`seo/${key}: social preview tags match canonical`,
+			Boolean(head.ogTitle) && Boolean(head.ogDescription) && head.ogUrl === head.canonical,
+			`ogUrl=${head.ogUrl || '(missing)'}`
+		);
+		check(`seo/${key}: indexable`, !/noindex/i.test(head.robots), head.robots || '(default)');
+		check(`seo/${key}: viewport meta`, head.viewport.includes('width=device-width'), head.viewport);
+		check(`seo/${key}: lang attribute`, head.lang === 'en', head.lang || '(missing)');
+		check(`seo/${key}: exactly one h1`, head.h1s === 1, String(head.h1s));
+		check(`seo/${key}: favicon`, head.favicon);
+		check(`seo/${key}: every image has alt text`, head.imagesWithoutAlt.length === 0, head.imagesWithoutAlt.slice(0, 2).join(', '));
+	}
+	await page.close();
+}
+
+/**
+ * Core Web Vitals on the two page shapes (home grid, heaviest converter).
+ * Thresholds mirror Lighthouse's 'good' bands where applicable.
+ */
+async function vitalsCheck(name, suffix) {
+	const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+	await context.addInitScript(() => {
+		window.__cumulative = { lcp: 0, cls: 0, fcp: 0 };
+		new PerformanceObserver((list) => {
+			for (const entry of list.getEntries()) {
+				if (entry.startTime > window.__cumulative.lcp) window.__cumulative.lcp = entry.startTime;
+			}
+		}).observe({ type: 'largest-contentful-paint', buffered: true });
+		new PerformanceObserver((list) => {
+			for (const entry of list.getEntries()) {
+				if (!entry.hadRecentInput) window.__cumulative.cls += entry.value;
+			}
+		}).observe({ type: 'layout-shift', buffered: true });
+		new PerformanceObserver((list) => {
+			for (const entry of list.getEntries()) {
+				if (entry.name === 'first-contentful-paint') window.__cumulative.fcp = entry.startTime;
+			}
+		}).observe({ type: 'paint', buffered: true });
+	});
+	const page = await context.newPage();
+	await page.goto(`${BASE}${suffix}`, { waitUntil: 'networkidle' });
+	await page.waitForTimeout(400);
+	const vitals = await page.evaluate(() => {
+		const entries = performance.getEntriesByType('resource');
+		const navigation = performance.getEntriesByType('navigation')[0];
+		const bytes = (entry) => entry.transferSize || entry.encodedBodySize || 0;
+		return {
+			...window.__cumulative,
+			requests: entries.length + (navigation ? 1 : 0),
+			kb: Math.round((entries.reduce((sum, entry) => sum + bytes(entry), 0) + (navigation ? bytes(navigation) : 0)) / 1024),
+			jsKb: Math.round(entries.filter((entry) => entry.initiatorType === 'script').reduce((sum, entry) => sum + bytes(entry), 0) / 1024)
+		};
+	});
+	check(`perf/${name}: first paint under 2.5s`, vitals.fcp > 0 && vitals.fcp < 2500, `${Math.round(vitals.fcp)}ms`);
+	check(`perf/${name}: largest paint under 2.5s`, vitals.lcp > 0 && vitals.lcp < 2500, `${Math.round(vitals.lcp)}ms`);
+	check(`perf/${name}: layout shift negligible`, vitals.cls < 0.1, vitals.cls.toFixed(3));
+	check(`perf/${name}: ≤ 40 requests`, vitals.requests <= 40, String(vitals.requests));
+	check(`perf/${name}: ≤ 500 KB transferred`, vitals.kb <= 500, `${vitals.kb} KB`);
+	check(`perf/${name}: ≤ 350 KB script weight`, vitals.jsKb <= 350, `${vitals.jsKb} KB`);
+	await context.close();
+}
+
+await vitalsCheck('home', '/');
+await vitalsCheck('pdf-to-word', '/pdf-to-word/');
 
 await browser.close();
 server.close();
