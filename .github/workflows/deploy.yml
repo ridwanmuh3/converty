@@ -35,6 +35,35 @@ jobs:
         # Deployed as a project site: https://ridwanmuh3.github.io/converty/
         run: npm run build
 
+      # The e2e, design and perf suites drive a real browser against `build/`.
+      - name: Locate the bundled browser
+        run: |
+          for candidate in /usr/bin/google-chrome /opt/google/chrome/chrome /usr/bin/chromium /usr/bin/chromium-browser; do
+            if [ -x "$candidate" ]; then
+              echo "CHROME_PATH=$candidate" >> "$GITHUB_ENV"
+              echo "Using $candidate"
+              exit 0
+            fi
+          done
+          echo "No Chrome or Chromium on this runner" >&2
+          exit 1
+
+      - name: Install ffmpeg for the media fixtures
+        run: |
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+
+      - name: End-to-end checks
+        run: npm run test:e2e
+
+      - name: Design, accessibility and SEO audit
+        run: npm run test:design
+
+      - name: Performance gate
+        run: npm run test:perf
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
