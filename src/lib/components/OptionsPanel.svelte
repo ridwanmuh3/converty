@@ -26,7 +26,17 @@
 					{/if}
 				</label>
 
-				{#if def.type === 'select'}
+				{#if def.type === 'text'}
+					<input
+						id="option-{def.key}"
+						class="select h-11 w-full"
+						type="text"
+						placeholder={def.placeholder}
+						{disabled}
+						value={options[def.key]}
+						oninput={(event) => set(def.key, event.currentTarget.value)}
+					/>
+				{:else if def.type === 'select'}
 					<select
 						id="option-{def.key}"
 						class="select"

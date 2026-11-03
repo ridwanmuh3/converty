@@ -1,13 +1,32 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { onMount } from 'svelte';
 	import Footer from '#lib/components/Footer.svelte';
 	import FidelityBadge from '#lib/components/FidelityBadge.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Nav from '#lib/components/Nav.svelte';
+	import UniversalDrop from '#lib/components/UniversalDrop.svelte';
 	import type { IconName } from '#lib/components/icon-names';
+	import { takeWaitingFiles } from '#lib/core/handoff.svelte';
+	import { registerIntake } from '#lib/core/intake.svelte';
 	import { LIMITS } from '#lib/core/limits';
 	import { SITE_ORIGIN } from '#lib/core/site';
-	import { TOOLS, type ToolCategory, type ToolDef } from '#lib/tools/registry';
+	import { popularTools, TOOLS, type ToolCategory, type ToolDef } from '#lib/tools';
+
+	/** The drop zone owns detection; the page only needs to hand it files. */
+	type UniversalDropApi = { handleFiles: (files: File[]) => Promise<void> };
+
+	let universalDrop = $state<UniversalDropApi | null>(null);
+
+	onMount(() => {
+		// Files left over from a mixed drop resume here instead of being lost.
+		const waiting = takeWaitingFiles();
+		if (waiting.length > 0) void universalDrop?.handleFiles(waiting);
+
+		// Drops anywhere on the home page go through the same router.
+		return registerIntake((files) => universalDrop?.handleFiles(files));
+	});
+
 
 	const groups: { id: ToolCategory; label: string; blurb: string; tools: ToolDef[] }[] = [
 		{
@@ -29,6 +48,8 @@
 			tools: TOOLS.filter((tool) => tool.category === 'document')
 		}
 	];
+
+	const popular = popularTools(TOOLS);
 
 	const steps: { icon: IconName; title: string; body: string }[] = [
 		{
@@ -128,34 +149,56 @@
 <main id="main">
 	<section class="hero-glow border-b border-line">
 		<div class="mx-auto max-w-[1200px] px-5 pb-14 pt-14 md:px-6 md:pb-20 md:pt-20 lg:px-8">
-			<div class="max-w-[760px]">
-				<span class="badge badge-neutral">
-					<span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span>
-					100% in your browser
-				</span>
+			<div class="grid gap-10 lg:grid-cols-[1.1fr_1fr] items-center">
+				<div class="max-w-[620px]">
+					<span class="badge badge-neutral">
+						<span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span>
+						100% in your browser
+					</span>
 
-				<h1 class="t-display-xl mt-5 text-ink">Convert files without uploading them.</h1>
+					<h1 class="t-display-xl mt-5 text-ink">Convert files without uploading them.</h1>
 
-				<p class="t-body-lg mt-4 max-w-[580px] text-body">
-					Convert audio, PDF, Word, Excel and images in this tab. Files are not uploaded for conversion.
-				</p>
+					<p class="t-body-lg mt-4 max-w-[580px] text-body">
+						Convert audio, PDF, Word, Excel and images in this tab. Files are not uploaded for conversion.
+					</p>
 
-				<div class="mt-8 flex flex-wrap gap-3">
-					<a href="#tools" class="btn btn-primary">
-						Choose a converter
-						<Icon name="arrow-right" size={18} />
-					</a>
-					<a href="#how" class="btn btn-secondary">See how it works</a>
+					<div class="mt-8 flex flex-wrap gap-3">
+						<a href="#tools" class="btn btn-primary">
+							Choose a converter
+							<Icon name="arrow-right" size={18} />
+						</a>
+						<a href="#how" class="btn btn-secondary">See how it works</a>
+					</div>
+
+					<ul class="t-body-sm mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-body">
+						<li class="flex items-center gap-1.5">
+							<Icon name="check" size={16} /> Files processed one at a time
+						</li>
+						<li class="flex items-center gap-1.5">
+							<Icon name="check" size={16} /> No account, no watermark
+						</li>
+					</ul>
 				</div>
 
-				<ul class="t-body-sm mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-body">
-					<li class="flex items-center gap-1.5">
-						<Icon name="check" size={16} /> Files processed one at a time
-					</li>
-					<li class="flex items-center gap-1.5">
-						<Icon name="check" size={16} /> No account, no watermark
-					</li>
-				</ul>
+				<!-- Universal Drop Zone -->
+				<div class="w-full">
+					<UniversalDrop bind:this={universalDrop} />
+				</div>
+			</div>
+
+			<!-- Popular conversions quick strip -->
+			<div class="mt-12 pt-8 border-t border-line/60">
+				<p class="t-caption uppercase font-semibold tracking-wider text-mute mb-3">
+					Popular conversions
+				</p>
+				<div class="flex flex-wrap gap-2">
+					{#each popular as tool}
+						<a href={`${resolve('/')}${tool.slug}`} class="btn btn-secondary btn-sm flex items-center gap-2">
+							<Icon name={tool.icon} size={16} />
+							<span>{tool.name}</span>
+						</a>
+					{/each}
+				</div>
 			</div>
 		</div>
 	</section>
@@ -259,9 +302,13 @@
 
 				<ul class="grid gap-3 sm:grid-cols-2">
 					{#each privacyPoints as point}
-						<li class="card p-5">
+						<li
+							class="card p-5"
+							id={point.icon === 'file' ? 'limits' : undefined}
+							class:scroll-mt-24={point.icon === 'file'}
+						>
 							<span
-								class="flex h-9 w-9 items-center justify-center rounded-full bg-bone text-ink"
+								class="flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] bg-bone text-ink"
 							>
 								<Icon name={point.icon} size={18} />
 							</span>
@@ -274,53 +321,24 @@
 		</div>
 	</section>
 
-	<section id="limits" class="scroll-mt-20 border-y border-line bg-bone">
-		<div class="mx-auto max-w-[1200px] px-5 py-16 md:px-6 md:py-24 lg:px-8">
-			<div class="max-w-[620px]">
-				<h2 class="t-display-lg text-ink">Why these limits exist</h2>
-				<p class="t-body-lg mt-2 text-body">
-					Conversion runs in this tab, so the caps come from your device’s memory budget, not from a server. Decoded images, audio and output files can need several times their input size, so the ceilings below keep the tab from running out of memory.
-				</p>
-			</div>
+	<section id="faq" class="scroll-mt-20 border-t border-line bg-bone">
+		<div class="mx-auto max-w-[800px] px-5 py-16 md:px-6 md:py-24 lg:px-8">
+			<h2 class="t-display-lg text-center text-ink">Frequently asked questions</h2>
+			<p class="t-body-lg mt-2 text-center text-body">
+				How Converty runs in your browser and why it stays fast.
+			</p>
 
-			<div class="mt-8 grid gap-4 sm:grid-cols-2">
-				<div class="card p-6">
-					<p class="t-display-lg tabular text-ink">{LIMITS.maxFileBytes / 1024 / 1024} MB</p>
-					<p class="t-body-md mt-1 text-body">per file</p>
-					<p class="t-body-sm mt-2 text-mute">
-						{LIMITS.maxTotalBytes / 1024 / 1024} MB of input across one batch. Enforced in the browser, so it applies on every device.
-					</p>
-				</div>
-				<div class="card p-6">
-					<p class="t-display-lg tabular text-ink">{LIMITS.maxPdfPages}</p>
-					<p class="t-body-md mt-1 text-body">pages per PDF</p>
-					<p class="t-body-sm mt-2 text-mute">
-						Applies to PDF inputs. Longer files are refused before rendering rather than exhausting memory.
-					</p>
-				</div>
-			</div>
-		</div>
-	</section>
-
-	<section id="faq" class="mx-auto max-w-[1200px] scroll-mt-20 px-5 py-16 md:px-6 md:py-24 lg:px-8">
-		<div class="grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
-			<div>
-				<h2 class="t-display-lg text-ink">Questions people actually ask</h2>
-				<p class="t-body-md mt-3 text-body">
-					If something is missing, the limitation is probably documented on the tool page itself.
-				</p>
-			</div>
-
-			<div>
+			<dl class="mt-10 space-y-4">
 				{#each faqs as faq}
-					<details class="disclosure">
-						<summary>{faq.q}</summary>
-						<div class="disclosure-body">{faq.a}</div>
-					</details>
+					<div class="card p-6">
+						<dt class="t-subtitle text-ink">{faq.q}</dt>
+						<dd class="t-body-md mt-2 text-body">{faq.a}</dd>
+					</div>
 				{/each}
-			</div>
+			</dl>
 		</div>
 	</section>
 </main>
 
 <Footer />
+

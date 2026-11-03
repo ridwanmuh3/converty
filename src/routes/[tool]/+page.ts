@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { getTool, TOOLS } from '#lib/tools/registry';
+import { getTool, TOOLS } from '#lib/tools';
 
 export const prerender = true;
 
