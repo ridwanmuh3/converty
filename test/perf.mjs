@@ -9,7 +9,7 @@ const paths = (process.env.BASE_PATH ?? '/converty').replace(/\/+$/, '');
 const PORT = 4176;
 const BASE = `http://localhost:${PORT}${paths}`;
 const FIXTURES = join(process.cwd(), 'test', 'fixtures');
-const OUT_FILE = join(process.cwd(), 'test', 'perf-baseline.json');
+const OUT_FILE = process.env.PERF_BASELINE ?? join(process.cwd(), 'test', 'perf-baseline.json');
 const CHROME = process.env.CHROME_PATH ?? '/usr/bin/chromium-browser';
 
 const PIPELINES = [
@@ -44,8 +44,74 @@ const ITERATIONS = 3;
 // `npm run test:perf` compares against the recorded baseline; --update records it.
 const UPDATE = process.argv.includes('--update');
 const previous = existsSync(OUT_FILE) && !UPDATE ? JSON.parse(await readFile(OUT_FILE, 'utf-8')) : null;
+// A baseline older than this format is a flat map of pipelines with no calibration.
+const previousPipelines = previous ? (previous.pipelines ?? previous) : null;
+const previousCalibration = previous?.calibration_ms ?? null;
+
+/**
+ * A fixed CPU workload, timed in the same browser that runs the conversions.
+ * Absolute times say nothing about other machines, so the comparison scales the
+ * recorded baseline by how much slower or faster this host is than the one that
+ * recorded it. The workload is independent of the app, so app changes cannot
+ * move it.
+ */
+async function measureCalibration() {
+	const page = await browser.newPage();
+	await page.goto('about:blank');
+	const median = await page.evaluate(() => {
+		const runs = [];
+		for (let run = 0; run < 5; run += 1) {
+			const start = performance.now();
+			let hash = 2166136261;
+			// Sized for roughly 200 ms per run, so host jitter cannot swing the
+			// factor the way a 25 ms sample did.
+			for (let i = 0; i < 64_000_000; i += 1) {
+				hash ^= i;
+				hash = Math.imul(hash, 16777619);
+			}
+			let x = 0.25;
+			for (let i = 0; i < 6_400_000; i += 1) x = Math.sqrt(x + 1) * 1.000001;
+			runs.push(performance.now() - start);
+			// Keep both results observable so neither loop can be optimised away.
+			if (hash === 42 && x < 0) runs.pop();
+		}
+		runs.sort((a, b) => a - b);
+		return Math.round(runs[Math.floor(runs.length / 2)]);
+	});
+	await page.close();
+	return median;
+}
 
 try {
+	const calibration = await measureCalibration();
+	const override = Number(process.env.PERF_HARDWARE_FACTOR);
+	const rawFactor =
+		Number.isFinite(override) && override > 0
+			? override
+			: previousCalibration
+				? calibration / previousCalibration
+				: 1;
+	// A wildly different factor means the machine changed shape (fewer cores,
+	// emulation); clamp it so the gate stays meaningful instead of unbounded.
+	const factor = Math.min(4, Math.max(0.33, rawFactor));
+	// Scaling only ever widens the budget: a faster host still gets the plain 20%
+	// band, while a slower one gets the same converted into its own speed.
+	const budgetFactor = Math.max(1, factor);
+	const allowance = 1 + 0.2 * budgetFactor;
+	const longTaskLimit = Math.min(400, Math.round(200 * budgetFactor));
+
+	if (previousCalibration) {
+		console.log(
+			`Machine calibration: ${calibration} ms (baseline ${previousCalibration} ms, ×${factor.toFixed(2)} vs reference)`
+		);
+	} else if (previous) {
+		console.log(
+			`Machine calibration: ${calibration} ms (baseline has no calibration, assuming this is the reference machine)`
+		);
+	} else {
+		console.log(`Machine calibration: ${calibration} ms (no baseline yet, recording one)`);
+	}
+
 	console.log(`Running performance harness (${ITERATIONS} iterations per pipeline)...\n`);
 
 	for (const { slug, fixture, options, label } of PIPELINES) {
@@ -158,31 +224,38 @@ try {
 		);
 	}
 
-	// Acceptance gates: a >20% regression in the median wall clock, or any
-	// main-thread task over 200 ms, fails the run. The median is gated because a
-	// p95 over three samples is just the slowest run: on a shared machine one
-	// scheduler stall moves it arbitrarily, which is why p95 is reported but not
-	// gated here.
+	// Acceptance gates: the median wall clock may not exceed the recorded median
+	// by more than 20% once the baseline is scaled to this machine's measured
+	// speed, and no main-thread task may exceed 200 ms (scaled the same way, so a
+	// slower runner is not punished for the same code). p95 is reported but not
+	// gated: over three samples it is just the slowest run, which one host stall
+	// moves arbitrarily.
 	const regressions = [];
 	for (const [slug, row] of Object.entries(results)) {
-		if (row.max_long_task_ms > 200) {
-			regressions.push(`${slug}: main-thread task ${row.max_long_task_ms} ms > 200 ms`);
-		}
-		const before = previous?.[slug];
-		if (!before?.p50_ms) continue;
-		const change = (row.p50_ms - before.p50_ms) / before.p50_ms;
-		if (change > 0.2) {
+		if (row.max_long_task_ms > longTaskLimit) {
 			regressions.push(
-				`${slug}: p50_ms regressed ${Math.round(change * 100)}% (${before.p50_ms} → ${row.p50_ms} ms)`
+				`${slug}: main-thread task ${row.max_long_task_ms} ms > ${longTaskLimit} ms limit`
+			);
+		}
+		const before = previousPipelines?.[slug];
+		if (!before?.p50_ms) continue;
+		const limit = Math.round(before.p50_ms * allowance);
+		if (row.p50_ms > limit) {
+			regressions.push(
+				`${slug}: p50_ms regressed ${Math.round(((row.p50_ms - before.p50_ms) / before.p50_ms) * 100)}% (${before.p50_ms} → ${row.p50_ms} ms, limit ${limit} ms at ×${factor.toFixed(2)} hardware)`
 			);
 		}
 	}
 
 	if (UPDATE || !previous) {
-		await writeFile(OUT_FILE, JSON.stringify(results, null, 2), 'utf-8');
+		await writeFile(
+			OUT_FILE,
+			JSON.stringify({ calibration_ms: calibration, pipelines: results }, null, 2),
+			'utf-8'
+		);
 		console.log(`\nBaseline recorded to ${OUT_FILE}`);
 	} else {
-		console.log(`\nCompared against ${OUT_FILE}`);
+		console.log(`\nCompared against ${OUT_FILE} (allowance ${Math.round((allowance - 1) * 100)}% over baseline at ×${factor.toFixed(2)} hardware)`);
 	}
 
 	if (regressions.length > 0) {
@@ -191,7 +264,7 @@ try {
 		process.exitCode = 1;
 	} else {
 		console.log(
-			'Performance gate passed (median within 20%, no main-thread task over 200 ms; p95 reported above).'
+			'Performance gate passed (median within the hardware-scaled 20% allowance, no main-thread task over the scaled 200 ms limit; p95 reported above).'
 		);
 	}
 } finally {

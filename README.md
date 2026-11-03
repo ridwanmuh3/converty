@@ -39,7 +39,7 @@ npm run preview    # serve ./build with clean URLs (test/serve.mjs)
 npm run check      # svelte-check + TypeScript
 npm run fixtures   # generate test/fixtures
 npm run test:e2e    # Chromium end-to-end conversions, workers and offline (115 checks)
-npm run test:perf   # long-task and timing gate against test/perf-baseline.json
+npm run test:perf   # long-task and timing gate against test/perf-baseline.json (scaled by a CPU calibration, so slower machines are not false failures)
 npm run test:design # tokens, contrast, touch targets, overflow, dark mode + Lighthouse-style page perf & SEO audit (306 checks)
 ```
 
