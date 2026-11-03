@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 const root = join(process.cwd(), 'build');
 
 // Optional base path, mirroring a GitHub Pages project site: /converty/…
-const basePath = process.env.BASE_URL || process.env.BASE_PATH || '';
+const basePath = process.env.BASE_URL || process.env.BASE_PATH || '/converty';
 
 const TYPES = {
 	'.html': 'text/html; charset=utf-8',
@@ -24,7 +24,7 @@ const TYPES = {
 };
 
 export function startServer(port = 4173, base = undefined) {
-	const basePath = base ?? process.env.BASE_PATH ?? '';
+	const basePath = base ?? process.env.BASE_PATH ?? '/converty';
 	const server = createServer(async (request, response) => {
 		let pathname = decodeURIComponent(new URL(request.url ?? '/', 'http://localhost').pathname);
 

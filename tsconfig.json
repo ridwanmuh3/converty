@@ -15,6 +15,5 @@
 			"#lib/*": ["./src/lib/*"]
 		}
 	},
-	"include": ["src", "test", "*"],
-	"exclude": ["src/service-worker"]
+	"include": ["src", "test", "*"]
 }

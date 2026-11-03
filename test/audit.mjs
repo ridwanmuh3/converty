@@ -1,7 +1,8 @@
 import { chromium } from 'playwright-core';
 import { startServer } from './serve.mjs';
 
-const BASE = `http://localhost:4175${(process.env.BASE_PATH ?? '').replace(/\/+$/, '')}`;
+process.env.TMPDIR = '/tmp';
+const BASE = `http://localhost:4175${(process.env.BASE_PATH ?? '/converty').replace(/\/+$/, '')}`;
 const server = await startServer(4175);
 const browser = await chromium.launch({
 	executablePath: process.env.CHROME_PATH ?? '/usr/bin/chromium-browser',
@@ -206,7 +207,11 @@ for (const slug of [
 	'mp4-to-mp3',
 	'word-to-pdf',
 	'excel-to-pdf',
-	'pdf-to-word'
+	'pdf-to-word',
+	'merge-pdf',
+	'split-pdf',
+	'compress-image',
+	'image-to-pdf'
 ]) {
 	await page.goto(`${BASE}/${slug}`, { waitUntil: 'networkidle' });
 	const structure = await page.evaluate(() => ({
@@ -288,10 +293,15 @@ const SEO_PATHS = [
 	'word-to-pdf/',
 	'excel-to-pdf/',
 	'pdf-to-word/',
+	'merge-pdf/',
+	'split-pdf/',
+	'compress-image/',
 	'mp3-converter/',
 	'mp4-to-mp3/',
 	'video-to-mp3/'
 ];
+const seenTitles = new Map();
+const seenDescriptions = new Map();
 
 /**
  * Head scan for every page: title, description, canonical, social preview,
@@ -337,7 +347,22 @@ const SEO_PATHS = [
 		check(`seo/${key}: exactly one h1`, head.h1s === 1, String(head.h1s));
 		check(`seo/${key}: favicon`, head.favicon);
 		check(`seo/${key}: every image has alt text`, head.imagesWithoutAlt.length === 0, head.imagesWithoutAlt.slice(0, 2).join(', '));
+		if (seenTitles.has(head.title)) {
+			check(`seo/${key}: title is unique`, false, `duplicates ${seenTitles.get(head.title)}`);
+		} else {
+			seenTitles.set(head.title, key);
+		}
+		if (seenDescriptions.has(head.description)) {
+			check(`seo/${key}: description is unique`, false, `duplicates ${seenDescriptions.get(head.description)}`);
+		} else {
+			seenDescriptions.set(head.description, key);
+		}
 	}
+	check(
+		'seo: all 15 tool pages plus the home page are prerendered',
+		SEO_PATHS.length === 16 && seenTitles.size === 16,
+		`${seenTitles.size} unique titles`
+	);
 	await page.close();
 }
 
