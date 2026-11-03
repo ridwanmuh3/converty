@@ -71,6 +71,7 @@ export const convertXlsxToPdf: Converter = async (file, ctx) => {
 
 	usable.forEach((sheet, sheetIndex) => {
 		if (ctx.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+		ctx.onPhase?.(`Laying out sheet ${sheetIndex + 1} of ${usable.length}`);
 		if (sheetIndex > 0) doc.addPage('a4', orientation);
 
 		doc.setFont('helvetica', 'bold');
@@ -109,6 +110,7 @@ export const convertXlsxToPdf: Converter = async (file, ctx) => {
 		ctx.onProgress(0.1 + (0.75 * (sheetIndex + 1)) / usable.length);
 	});
 
+	ctx.onPhase?.('Numbering pages');
 	const pageCount = doc.getNumberOfPages();
 	for (let page = 1; page <= pageCount; page += 1) {
 		doc.setPage(page);
@@ -119,5 +121,5 @@ export const convertXlsxToPdf: Converter = async (file, ctx) => {
 	}
 
 	ctx.onProgress(1);
-	return { blob: doc.output('blob') };
+	return { blob: doc.output('blob'), meta: { pages: pageCount } };
 };

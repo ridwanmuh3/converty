@@ -47,7 +47,9 @@ function pageLines(page: PdfPageText): Line[] {
 }
 
 export const convertPdfToDocx: Converter = async (file, ctx) => {
+	ctx.onPhase?.('Extracting text');
 	const pdf = await readPdfText(file, (fraction) => ctx.onProgress(fraction * 0.7), ctx.signal);
+	ctx.onPhase?.('Building Word document');
 	assertHasText(pdf, file);
 	const pages = pdf.pages.map(pageLines);
 	if (!pages.some((lines) => lines.length)) throw new Error(`“${file.name}” contains no extractable text.`);
@@ -121,5 +123,5 @@ export const convertPdfToDocx: Converter = async (file, ctx) => {
 	ctx.onProgress(0.9);
 	const blob = await Packer.toBlob(document);
 	ctx.onProgress(1);
-	return { blob };
+	return { blob, meta: { pages: pdf.numPages } };
 };

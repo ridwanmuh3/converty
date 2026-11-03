@@ -1,0 +1,74 @@
+{
+  "audio-converter": {
+    "label": "Audio (WAV→MP3)",
+    "fixture": "tone.wav",
+    "p50_ms": 267,
+    "p95_ms": 271,
+    "max_long_task_ms": 0,
+    "long_tasks_count_p50": 0,
+    "peak_memory_mb": 5
+  },
+  "image-converter": {
+    "label": "Image (JPG→WebP)",
+    "fixture": "photo.jpg",
+    "p50_ms": 248,
+    "p95_ms": 257,
+    "max_long_task_ms": 56,
+    "long_tasks_count_p50": 1,
+    "peak_memory_mb": 5
+  },
+  "word-to-pdf": {
+    "label": "Word→PDF",
+    "fixture": "letter.docx",
+    "p50_ms": 219,
+    "p95_ms": 228,
+    "max_long_task_ms": 50,
+    "long_tasks_count_p50": 0,
+    "peak_memory_mb": 8
+  },
+  "excel-to-pdf": {
+    "label": "Excel→PDF",
+    "fixture": "data.xlsx",
+    "p50_ms": 362,
+    "p95_ms": 370,
+    "max_long_task_ms": 52,
+    "long_tasks_count_p50": 0,
+    "peak_memory_mb": 5
+  },
+  "pdf-to-word": {
+    "label": "PDF→Word",
+    "fixture": "report.pdf",
+    "p50_ms": 855,
+    "p95_ms": 873,
+    "max_long_task_ms": 0,
+    "long_tasks_count_p50": 0,
+    "peak_memory_mb": 5
+  },
+  "jpg-to-pdf": {
+    "label": "JPG→PDF",
+    "fixture": "photo.jpg",
+    "p50_ms": 257,
+    "p95_ms": 357,
+    "max_long_task_ms": 0,
+    "long_tasks_count_p50": 0,
+    "peak_memory_mb": 5
+  },
+  "pdf-to-jpg": {
+    "label": "PDF→JPG",
+    "fixture": "report.pdf",
+    "p50_ms": 912,
+    "p95_ms": 912,
+    "max_long_task_ms": 50,
+    "long_tasks_count_p50": 0,
+    "peak_memory_mb": 5
+  },
+  "mp4-to-mp3": {
+    "label": "MP4→MP3",
+    "fixture": "clip.mp4",
+    "p50_ms": 928,
+    "p95_ms": 942,
+    "max_long_task_ms": 50,
+    "long_tasks_count_p50": 0,
+    "peak_memory_mb": 6
+  }
+}

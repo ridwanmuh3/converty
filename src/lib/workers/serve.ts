@@ -34,10 +34,10 @@ export function serve(converters: Record<string, Converter>): void {
 			transfer ? scope.postMessage(message, transfer) : scope.postMessage(message);
 
 		try {
-			const file = new File([request.bytes], request.name, { type: request.mime });
-			const output = await converter(file, {
+			const output = await converter(request.file, {
 				options: request.options,
 				signal: new AbortController().signal,
+				onPhase: (label) => post({ type: 'phase', id: request.id, label }),
 				onProgress: (value) => {
 					const now = performance.now();
 					// The UI only needs ~10 updates per second.
@@ -59,7 +59,8 @@ export function serve(converters: Record<string, Converter>): void {
 					id: request.id,
 					bytes,
 					mime: output.blob.type || 'application/octet-stream',
-					ext: output.ext
+					ext: output.ext,
+					meta: output.meta
 				},
 				[bytes]
 			);

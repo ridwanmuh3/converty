@@ -25,6 +25,7 @@ async function embeddable(file: File): Promise<{ bytes: Uint8Array; type: 'jpg' 
 }
 
 export const convertImageToPdf: Converter = async (file, ctx) => {
+	ctx.onPhase?.('Embedding image');
 	const { PDFDocument } = await import('pdf-lib');
 	ctx.onProgress(0.15);
 
@@ -73,5 +74,9 @@ export const convertImageToPdf: Converter = async (file, ctx) => {
 	const bytes = new Uint8Array(saved.length);
 	bytes.set(saved);
 	ctx.onProgress(1);
-	return { blob: new Blob([bytes], { type: 'application/pdf' }), ext: 'pdf' };
+	return {
+		blob: new Blob([bytes], { type: 'application/pdf' }),
+		ext: 'pdf',
+		meta: { pages: 1, width: Math.round(pageWidth), height: Math.round(pageHeight) }
+	};
 };

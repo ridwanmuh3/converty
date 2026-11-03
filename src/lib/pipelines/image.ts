@@ -20,7 +20,8 @@ type Canvas = HTMLCanvasElement | OffscreenCanvas;
 
 async function decode(file: File): Promise<ImageBitmap | HTMLImageElement> {
 	try {
-		return await createImageBitmap(file);
+		// Honour EXIF orientation up front so a phone photo is not sideways.
+		return await createImageBitmap(file, { imageOrientation: 'from-image' });
 	} catch {
 		const ext = extensionOf(file.name);
 		if (ext === 'heic' || ext === 'heif') {
@@ -112,6 +113,22 @@ export const convertImage: Converter = async (file, ctx) => {
 		height = Math.max(1, Math.floor(height * scale));
 	}
 
+	// Let the decoder do the downscale: createImageBitmap's resize is both
+	// sharper and cheaper than stretching pixels through a canvas.
+	let renderSource: ImageBitmap | HTMLImageElement = source;
+	if (width !== source.width || height !== source.height) {
+		try {
+			renderSource = await createImageBitmap(source as CanvasImageSource, {
+				resizeWidth: width,
+				resizeHeight: height,
+				resizeQuality: 'high'
+			});
+			if ('close' in source) source.close();
+		} catch {
+			renderSource = source;
+		}
+	}
+
 	const canvas = createCanvas(width, height);
 	const context = canvas.getContext('2d') as CanvasRenderingContext2D | null;
 	if (!context) throw new Error('This browser blocked canvas rendering, so images cannot be converted.');
@@ -122,13 +139,14 @@ export const convertImage: Converter = async (file, ctx) => {
 	}
 	context.imageSmoothingEnabled = true;
 	context.imageSmoothingQuality = 'high';
-	context.drawImage(source as CanvasImageSource, 0, 0, width, height);
+	context.drawImage(renderSource as CanvasImageSource, 0, 0, width, height);
 
+	if ('close' in renderSource) renderSource.close();
 	if ('close' in source) source.close();
 	ctx.onProgress(0.75);
 
 	const blob = await toBlob(canvas, mime, quality);
 	ctx.onProgress(1);
 
-	return { blob, ext: EXT[format] ?? 'png' };
+	return { blob, ext: EXT[format] ?? 'png', meta: { width, height } };
 };

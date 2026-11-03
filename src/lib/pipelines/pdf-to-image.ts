@@ -1,4 +1,4 @@
-import { zipSync } from 'fflate';
+import { Zip, ZipPassThrough } from 'fflate';
 import { LIMITS, OUTPUT } from '#lib/core/limits';
 import type { Converter } from '#lib/core/types';
 
@@ -34,10 +34,23 @@ export const convertPdfToJpg: Converter = async (file, ctx) => {
 		}
 
 		const requested = Number(ctx.options.scale ?? 1) === 2 ? 2 : 1;
-		const rendered: Record<string, Uint8Array> = {};
+		const single = pdf.numPages === 1;
+		// Streaming ZIP: each page is appended and dropped, so peak memory is one
+		// page bitmap plus the compressed output rather than every page at once.
+		const chunks: Uint8Array[] = [];
+		let zipFailure: Error | null = null;
+		const archive = new Zip((error, chunk) => {
+			if (error) {
+				zipFailure = error;
+				return;
+			}
+			if (chunk) chunks.push(chunk);
+		});
+		let singleBytes: Uint8Array | null = null;
 
 		for (let index = 1; index <= pdf.numPages; index += 1) {
 			if (ctx.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+			ctx.onPhase?.(`Rendering page ${index} of ${pdf.numPages}`);
 
 			const page = await pdf.getPage(index);
 			const base = page.getViewport({ scale: 1 });
@@ -57,25 +70,45 @@ export const convertPdfToJpg: Converter = async (file, ctx) => {
 			}).promise;
 
 			const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: OUTPUT.jpegQuality });
-			rendered[`page-${String(index).padStart(3, '0')}.jpg`] = new Uint8Array(await blob.arrayBuffer());
+			const jpeg = new Uint8Array(await blob.arrayBuffer());
+			if (single) {
+				singleBytes = jpeg;
+			} else {
+				const entry = new ZipPassThrough(`page-${String(index).padStart(3, '0')}.jpg`);
+				archive.add(entry);
+				entry.push(jpeg, true);
+				if (zipFailure) throw zipFailure;
+			}
 			page.cleanup();
 			ctx.onProgress((index / pdf.numPages) * 0.95);
 			// Let the worker flush progress between pages.
 			await new Promise((resolve) => setTimeout(resolve, 0));
 		}
 
-		const names = Object.keys(rendered);
-		if (names.length === 1) {
-			const single = new Uint8Array(rendered[names[0]].length);
-			single.set(rendered[names[0]]);
-			return { blob: new Blob([single], { type: 'image/jpeg' }), ext: 'jpg' };
+		ctx.onPhase?.('Packaging output');
+		if (single && singleBytes) {
+			const copy = new Uint8Array(singleBytes.length);
+			copy.set(singleBytes);
+			return {
+				blob: new Blob([copy], { type: 'image/jpeg' }),
+				ext: 'jpg',
+				meta: { pages: 1 }
+			};
 		}
 
-		const zipped = zipSync(rendered, { level: 0 });
-		const bytes = new Uint8Array(zipped.length);
-		bytes.set(zipped);
+		archive.end();
+		const bytes = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
+		let offset = 0;
+		for (const chunk of chunks) {
+			bytes.set(chunk, offset);
+			offset += chunk.length;
+		}
 		ctx.onProgress(1);
-		return { blob: new Blob([bytes], { type: 'application/zip' }), ext: 'zip' };
+		return {
+			blob: new Blob([bytes], { type: 'application/zip' }),
+			ext: 'zip',
+			meta: { pages: pdf.numPages }
+		};
 	} finally {
 		await loadingTask.destroy();
 	}

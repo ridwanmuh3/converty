@@ -4,6 +4,7 @@ import { parseDocx } from './docx/parse';
 import { renderDocx, resolveGeometry } from './docx/render';
 
 export const convertDocxToPdf: Converter = async (file, ctx) => {
+	ctx.onPhase?.('Reading document');
 	const model = await parseDocx(file);
 	ctx.onProgress(0.15);
 
@@ -50,8 +51,9 @@ export const convertDocxToPdf: Converter = async (file, ctx) => {
 	}
 
 	const doc = makeDoc();
+	ctx.onPhase?.('Laying out pages');
 	await renderDocx(model, doc, renderOptions(totalPages), (options) => autoTable(doc as never, options as never));
 
 	ctx.onProgress(1);
-	return { blob: doc.output('blob') };
+	return { blob: doc.output('blob'), meta: { pages: doc.getNumberOfPages() } };
 };

@@ -23,6 +23,7 @@ export default defineConfig(async () => ({
 					'script-src': ['self', 'wasm-unsafe-eval'],
 					'style-src': ['self', 'unsafe-inline'],
 					'img-src': ['self', 'blob:', 'data:'],
+					'media-src': ['self', 'blob:'],
 					'font-src': ['self'],
 					'worker-src': ['self', 'blob:'],
 					'connect-src': ['self'],
