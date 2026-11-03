@@ -1,23 +1,21 @@
 import { extensionOf } from '#lib/core/format';
 import type { Converter } from '#lib/core/types';
+import { getTool, TOOLS } from '#lib/tools';
 
 /**
- * Slugs whose pipeline is safe to run inside the conversion worker. Everything
- * else (DOCX/XLSX→PDF via jsPDF, HEIC via heic2any, audio decode via
- * AudioContext) keeps the existing main-thread path.
+ * Slugs whose pipeline is safe to run inside the conversion worker,
+ * derived dynamically from the tool manifests.
  */
-export const WORKER_SLUGS = new Set([
-	'image-converter',
-	'jpg-to-pdf',
-	'image-to-pdf',
-	'pdf-to-jpg',
-	'mp4-to-mp3',
-	'video-to-mp3'
-]);
+export const WORKER_SLUGS = new Set(
+	TOOLS.filter((tool) => tool.worker !== null).map((tool) => tool.slug)
+);
 
 export async function loadConverter(slug: string): Promise<Converter> {
-	switch (slug) {
-		case 'image-converter': {
+	const tool = getTool(slug);
+	if (!tool) throw new Error(`Unknown tool: ${slug}`);
+
+	switch (tool.pipeline) {
+		case 'image': {
 			// HEIC needs the DOM decoder; everything else uses the worker-safe path.
 			const [{ convertImage }, { convertHeic }] = await Promise.all([
 				import('./image'),
@@ -30,26 +28,29 @@ export async function loadConverter(slug: string): Promise<Converter> {
 					: convertImage(file, ctx);
 			};
 		}
-		case 'heic-to-jpg':
+		case 'heic':
 			return (await import('./heic')).convertHeic;
-		case 'jpg-to-pdf':
-		case 'image-to-pdf':
+		case 'image-pdf':
 			return (await import('./image-pdf')).convertImageToPdf;
-		case 'pdf-to-jpg':
+		case 'pdf-to-image':
 			return (await import('./pdf-to-image')).convertPdfToJpg;
-		case 'mp4-to-mp3':
-		case 'video-to-mp3':
+		case 'video-to-audio':
 			return (await import('./video-to-audio')).convertVideoToMp3;
-		case 'word-to-pdf':
+		case 'docx-to-pdf':
 			return (await import('./docx-to-pdf')).convertDocxToPdf;
-		case 'excel-to-pdf':
+		case 'xlsx-to-pdf':
 			return (await import('./xlsx-to-pdf')).convertXlsxToPdf;
-		case 'pdf-to-word':
+		case 'pdf-to-docx':
 			return (await import('./pdf-to-docx')).convertPdfToDocx;
-		case 'audio-converter':
-		case 'mp3-converter':
+		case 'audio':
 			return (await import('./audio')).convertAudio;
+		case 'compress-image':
+			return (await import('./compress-image')).convertCompressedImage;
+		case 'merge-pdf':
+			return (await import('./merge-pdf')).convertInspectPdf;
+		case 'split-pdf':
+			return (await import('./split-pdf')).convertSplitPdf;
 		default:
-			throw new Error(`Unknown tool: ${slug}`);
+			throw new Error(`Unknown pipeline for tool: ${slug}`);
 	}
 }

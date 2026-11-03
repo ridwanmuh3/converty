@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { deflateSync } from 'node:zlib';
 import { join } from 'node:path';
 import { jsPDF } from 'jspdf';
 import {
@@ -28,6 +29,18 @@ await mkdir(out, { recursive: true });
 		const run = (args) =>
 			execFileSync('ffmpeg', ['-y', '-loglevel', 'error', ...args], { stdio: 'ignore' });
 		run(['-f', 'lavfi', '-i', 'color=c=orange:s=1200x800', '-frames:v', '1', join(out, 'photo.jpg')]);
+		// A noisy image has real detail, so compression has something to remove.
+		run([
+			'-f',
+			'lavfi',
+			'-i',
+			'color=c=orange:s=1200x800,noise=alls=32:allf=t',
+			'-frames:v',
+			'1',
+			'-q:v',
+			'2',
+			join(out, 'noisy.jpg')
+		]);
 		// MP3-in-MP4 keeps the fixture decodable in browsers without AAC support.
 		run([
 			'-f',
@@ -201,6 +214,55 @@ await mkdir(out, { recursive: true });
 		'base64'
 	);
 	await writeFile(join(out, 'pixel.png'), png);
+}
+
+/* ---------- Landscape + portrait PNGs, to prove page order ---------- */
+function crc32(buffer) {
+	let crc = 0xffffffff;
+	for (const byte of buffer) {
+		crc ^= byte;
+		for (let bit = 0; bit < 8; bit += 1) crc = crc & 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1;
+	}
+	return (crc ^ 0xffffffff) >>> 0;
+}
+
+function solidPng(width, height, [red, green, blue]) {
+	const stride = width * 4 + 1;
+	const raw = Buffer.alloc(stride * height);
+	for (let y = 0; y < height; y += 1) {
+		const row = y * stride;
+		for (let x = 0; x < width; x += 1) {
+			const offset = row + 1 + x * 4;
+			raw[offset] = red;
+			raw[offset + 1] = green;
+			raw[offset + 2] = blue;
+			raw[offset + 3] = 255;
+		}
+	}
+	const chunk = (type, data) => {
+		const length = Buffer.alloc(4);
+		length.writeUInt32BE(data.length);
+		const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+		const crc = Buffer.alloc(4);
+		crc.writeUInt32BE(crc32(body));
+		return Buffer.concat([length, body, crc]);
+	};
+	const header = Buffer.alloc(13);
+	header.writeUInt32BE(width, 0);
+	header.writeUInt32BE(height, 4);
+	header[8] = 8;
+	header[9] = 6;
+	return Buffer.concat([
+		Buffer.from('89504e470d0a1a0a', 'hex'),
+		chunk('IHDR', header),
+		chunk('IDAT', deflateSync(raw)),
+		chunk('IEND', Buffer.alloc(0))
+	]);
+}
+
+{
+	await writeFile(join(out, 'wide.png'), solidPng(300, 120, [200, 80, 60]));
+	await writeFile(join(out, 'tall.png'), solidPng(120, 300, [60, 100, 200]));
 }
 
 /* ---------- Short PCM WAV tone ---------- */
