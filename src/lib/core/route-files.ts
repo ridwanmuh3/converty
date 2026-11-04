@@ -102,7 +102,24 @@ export async function analyzeDrop(files: File[]): Promise<DropAnalysis> {
 		group.files.push(file);
 	}
 
-	return { groups: [...byKey.values()], notices };
+	// A many-to-one tool cannot produce anything from fewer files than it needs,
+	// so do not offer a dead end in the chooser (e.g. Merge PDF for one PDF).
+	const groups: FileGroup[] = [];
+	for (const group of byKey.values()) {
+		group.choices = group.choices.filter(
+			(choice) => choice.tool.minFiles <= group.files.length
+		);
+		if (group.choices.length === 0) {
+			notices.push({
+				message: `The available converters for ${group.label.toLowerCase()} need more files than this drop contains.`,
+				suggestion: 'Open a converter from the catalog below and add the remaining files there.'
+			});
+			continue;
+		}
+		groups.push(group);
+	}
+
+	return { groups, notices };
 }
 
 function basePath(): string {

@@ -238,6 +238,25 @@ async function convert(slug, files, countLabel, optionValues = {}) {
 		await page.evaluate(() => document.activeElement?.textContent?.includes('Convert') ?? false)
 	);
 
+	// A single image choosing PDF must convert, not fail at the combine step.
+	await home();
+	await drop(join(FIXTURES, 'pixel.png'));
+	await page.getByRole('dialog').waitFor({ timeout: 15_000 });
+	await page.getByRole('button', { name: /Convert to PDF/ }).click();
+	await waitForSlug('/image-to-pdf');
+	await page.locator('section ul > li').first().waitFor({ timeout: 15_000 });
+	await page.getByRole('button', { name: /^Convert 1 file/ }).click();
+	await page.waitForSelector('.alert-success', { timeout: 120_000 });
+	const combinedDownload = page.getByRole('button', { name: /^Download .+\.pdf$/ });
+	await combinedDownload.waitFor({ state: 'visible', timeout: 60_000 }).catch(() => {});
+	const heroDangerCount = await page.locator('.alert-danger').count();
+	const heroDownloadCount = await combinedDownload.count();
+	check(
+		'universal: a single image can become a PDF',
+		heroDangerCount === 0 && heroDownloadCount === 1,
+		`${heroDangerCount} error(s), ${heroDownloadCount} download(s)`
+	);
+
 	// .xlsx is a ZIP internally; the extension must still pick the Excel tool.
 	await home();
 	await drop(join(FIXTURES, 'data.xlsx'));
@@ -254,11 +273,25 @@ async function convert(slug, files, countLabel, optionValues = {}) {
 		(await page.getByRole('button', { name: /Convert to DOCX/ }).count()) === 1 &&
 			(await page.getByRole('button', { name: /Convert to JPG/ }).count()) === 1
 	);
+	check(
+		'universal: one PDF does not offer a merge that cannot run',
+		(await page.getByRole('button', { name: /Convert to PDF/ }).count()) === 0
+	);
 	await page.getByRole('button', { name: /Convert to JPG/ }).click();
 	await waitForSlug('/pdf-to-jpg');
 	await page.locator('section ul > li').first().waitFor({ timeout: 15_000 });
 	check('universal: choosing an output opens that tool', (await queuedCount()) === 1);
 	check('universal: home stays the only place with a hero drop zone', (await page.locator('.dropzone').count()) === 1);
+
+	// Two PDFs can be merged, so the chooser offers it again.
+	await home();
+	await drop([join(FIXTURES, 'report.pdf'), join(FIXTURES, 'scan.pdf')]);
+	await page.getByRole('dialog').waitFor({ timeout: 15_000 });
+	check(
+		'universal: two PDFs offer a merge',
+		(await page.getByRole('button', { name: /Convert to PDF/ }).count()) === 1
+	);
+	await page.getByRole('button', { name: 'Cancel' }).click();
 
 	// Unsupported files are explained, never silently ignored.
 	await home();
@@ -493,6 +526,24 @@ async function convertCombined(slug, files, countLabel, optionValues = {}) {
 	const target = join(OUT, `${slug}-${saved.suggestedFilename()}`);
 	await saved.saveAs(target);
 	return target;
+}
+
+{
+	// A single image is a complete batch in combined mode; it must not fall
+	// through to the Merge PDF rule that needs two documents.
+	const file = await convertCombined(
+		'image-to-pdf',
+		[join(FIXTURES, 'pixel.png')],
+		'1 file',
+		{ mode: 'combined' }
+	);
+	check('combine: a single image yields one PDF', (await signature(file, 5)) === '%PDF-', file);
+	const pages = await pdfDetail(file);
+	check('combine: a single image stays one page', pages.length === 1, `${pages.length} pages`);
+	check(
+		'combine: a single image raises no error',
+		(await page.locator('.alert-danger').count()) === 0
+	);
 }
 
 {

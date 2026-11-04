@@ -1,10 +1,6 @@
 import { LIMITS } from '#lib/core/limits';
 import type { Converter } from '#lib/core/types';
 
-export function assertMergeable(count: number): void {
-	if (count < 2) throw new Error('Add at least two PDFs to merge.');
-}
-
 /**
  * Open-and-count one PDF in the worker. The queue merges the returned originals
  * once every input is known, so the main thread never parses a document.
@@ -36,9 +32,15 @@ export const convertInspectPdf: Converter = async (file, ctx) => {
 	return { blob: file, ext: 'pdf', meta: { pages } };
 };
 
-/** Concatenates PDF parts in list order. */
+/**
+ * Concatenates PDF parts in list order.
+ *
+ * One part is valid: Image → PDF uses this same helper to build its combined
+ * output, and a single image is a complete batch. The "at least two files"
+ * rule belongs to the Merge PDF tool (`minFiles`), not to this assembler.
+ */
 export async function mergePdfParts(parts: Blob[], title: string): Promise<Blob> {
-	assertMergeable(parts.length);
+	if (parts.length === 0) throw new Error('There is nothing to combine.');
 	const { PDFDocument } = await import('pdf-lib');
 	const merged = await PDFDocument.create();
 
