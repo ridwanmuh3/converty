@@ -35,7 +35,10 @@ export const convertHeic: Converter = async (file, ctx) => {
 	canvas.width = width;
 	canvas.height = height;
 	const context = canvas.getContext('2d');
-	if (!context) throw new Error('This browser blocked canvas rendering, so HEIC photos cannot be converted.');
+	if (!context) {
+		bitmap.close();
+		throw new Error('This browser blocked canvas rendering, so HEIC photos cannot be converted.');
+	}
 
 	if (format === 'jpeg') {
 		context.fillStyle = '#ffffff';

@@ -623,6 +623,18 @@ async function convertCombined(slug, files, countLabel, optionValues = {}) {
 	const pages = await pdfDetail(single);
 	check('split: range keeps the requested page count', pages.length === 1, `${pages.length} pages`);
 	check('split: range starts at the requested page', (await pdfText(single)).includes('Method notes'));
+
+	// Repeating a range is valid input and must not collapse into one ZIP entry.
+	const repeated = await convert('split-pdf', join(FIXTURES, 'report.pdf'), '1 file', {
+		mode: 'range',
+		ranges: '1-2, 1-2'
+	});
+	const repeatedEntries = Object.keys(unzipSync(new Uint8Array(await readFile(repeated))));
+	check(
+		'split: repeated ranges produce distinct files',
+		repeatedEntries.length === 2 && new Set(repeatedEntries).size === 2,
+		repeatedEntries.join(',')
+	);
 }
 
 {

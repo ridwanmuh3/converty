@@ -26,7 +26,7 @@
 		saveStoredOptions
 	} from '#lib/core/options-storage';
 	import { BatchQueue, type Job } from '#lib/core/queue.svelte';
-	import { mergePdfParts } from '#lib/pipelines/merge-pdf';
+	import { mergePdfParts } from '#lib/pipelines/pdf-combine';
 	import type { DropNotice } from '#lib/core/route-files';
 	import { SITE_ORIGIN } from '#lib/core/site';
 	import type { ConvertOptions } from '#lib/core/types';

@@ -1,4 +1,4 @@
-import { baseName } from '#lib/core/format';
+import { baseName, uniqueName } from '#lib/core/format';
 import { LIMITS } from '#lib/core/limits';
 import type { Converter } from '#lib/core/types';
 
@@ -77,6 +77,7 @@ export const convertSplitPdf: Converter = async (file, ctx) => {
 		: parseRanges(ctx.options.ranges ?? '', totalPages);
 
 	const outputs: Record<string, Uint8Array> = {};
+	const taken = new Set<string>();
 	const single: { bytes: Uint8Array; label: string }[] = [];
 	const stem = baseName(file.name);
 
@@ -91,7 +92,12 @@ export const convertSplitPdf: Converter = async (file, ctx) => {
 		out.setTitle(`${stem} — ${spec.label}`);
 		const bytes = new Uint8Array(await out.save());
 		if (specs.length === 1) single.push({ bytes, label: spec.label });
-		else outputs[`${stem}-page-${spec.label.replace(/-/g, '-')}.pdf`] = bytes;
+		else {
+			// Repeated ranges are legal input but must not overwrite each other in
+			// the ZIP: "1-2, 1-2" yields two distinct files, not one.
+			const name = uniqueName(`${stem}-page-${spec.label}.pdf`, taken);
+			outputs[name] = bytes;
+		}
 		ctx.onProgress(0.1 + ((index + 1) / specs.length) * 0.8);
 		await new Promise((resolve) => setTimeout(resolve, 0));
 	}

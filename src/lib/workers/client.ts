@@ -163,18 +163,23 @@ export function createWorkerConverter(slug: string, fallback: Converter): Conver
 		}
 
 		return new Promise((resolve, reject) => {
-			let settled = false;
 			const finish = () => {
-				settled = true;
 				entry.worker.removeEventListener('message', onMessage);
 				entry.worker.removeEventListener('error', onError);
 				ctx.signal.removeEventListener('abort', onAbort);
 			};
 
-			/** A worker-only failure should not dead-end a file the main thread can handle. */
+			/**
+			 * A worker-only failure should not dead-end a file the main thread can
+			 * handle. When the fallback fails too, report its own error: it describes
+			 * the real cause, and the worker message is only a symptom.
+			 */
 			const retryOnMainThread = (message: string) => {
 				noteFallback(message);
-				fallback(file, ctx).then(resolve, () => reject(new Error(message)));
+				fallback(file, ctx).then(
+					resolve,
+					(error) => reject(error instanceof Error ? error : new Error(message))
+				);
 			};
 
 			// Synchronous encoders cannot observe a signal mid-loop, so cancelling
@@ -224,7 +229,8 @@ export function createWorkerConverter(slug: string, fallback: Converter): Conver
 			} catch (error) {
 				finish();
 				release(family, entry, true);
-				if (settled) return;
+				// Always reject: `finish()` above must not turn a failed hand-off into
+				// a promise that never settles, which would leave the job "working".
 				reject(error instanceof Error ? error : new Error('The file could not be passed to the worker.'));
 			}
 		});

@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
+import { cpus, loadavg } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { startServer } from './serve.mjs';
@@ -40,7 +41,9 @@ const browser = await chromium.launch({
 });
 
 const results = {};
-const ITERATIONS = 3;
+// More samples make the median resistant to one scheduling stall. A quiet host
+// needs fewer; PERF_ITERATIONS exists so a slow CI runner can trade time for noise.
+const ITERATIONS = Number(process.env.PERF_ITERATIONS ?? 5);
 // `npm run test:perf` compares against the recorded baseline; --update records it.
 const UPDATE = process.argv.includes('--update');
 const previous = existsSync(OUT_FILE) && !UPDATE ? JSON.parse(await readFile(OUT_FILE, 'utf-8')) : null;
@@ -224,12 +227,23 @@ try {
 		);
 	}
 
+	// Re-measure after the run. A host that gets busy mid-run stretches wall
+	// times with no code change, so the p50 gate must not call that a regression.
+	const calibrationEnd = await measureCalibration();
+	const drift = calibrationEnd / calibration;
+	const loadPerCore = loadavg()[0] / Math.max(1, cpus().length);
+	const busy = drift > 1.4 || loadPerCore > 1.5;
+	console.log(
+		`\nEnvironment: load ${loadPerCore.toFixed(2)}/core, calibration drift ×${drift.toFixed(2)}` +
+			(busy ? ' — host is oversubscribed, so p50 comparisons are skipped for this run' : '')
+	);
+
 	// Acceptance gates: the median wall clock may not exceed the recorded median
 	// by more than 20% once the baseline is scaled to this machine's measured
 	// speed, and no main-thread task may exceed 200 ms (scaled the same way, so a
 	// slower runner is not punished for the same code). p95 is reported but not
-	// gated: over three samples it is just the slowest run, which one host stall
-	// moves arbitrarily.
+	// gated: over five samples it is still just the slowest run, which one host
+	// stall moves arbitrarily.
 	const regressions = [];
 	for (const [slug, row] of Object.entries(results)) {
 		if (row.max_long_task_ms > longTaskLimit) {
@@ -238,7 +252,7 @@ try {
 			);
 		}
 		const before = previousPipelines?.[slug];
-		if (!before?.p50_ms) continue;
+		if (busy || !before?.p50_ms) continue;
 		const limit = Math.round(before.p50_ms * allowance);
 		if (row.p50_ms > limit) {
 			regressions.push(
@@ -264,7 +278,9 @@ try {
 		process.exitCode = 1;
 	} else {
 		console.log(
-			'Performance gate passed (median within the hardware-scaled 20% allowance, no main-thread task over the scaled 200 ms limit; p95 reported above).'
+			busy
+				? 'Performance gate passed on the long-task check only (host was oversubscribed; re-run on an idle machine to compare p50).'
+				: 'Performance gate passed (median within the hardware-scaled 20% allowance, no main-thread task over the scaled 200 ms limit; p95 reported above).'
 		);
 	}
 } finally {

@@ -131,7 +131,13 @@ export const convertImage: Converter = async (file, ctx) => {
 
 	const canvas = createCanvas(width, height);
 	const context = canvas.getContext('2d') as CanvasRenderingContext2D | null;
-	if (!context) throw new Error('This browser blocked canvas rendering, so images cannot be converted.');
+	if (!context) {
+		// Release the decoded bitmaps before bailing out; otherwise a blocked canvas
+		// leaves the full-size image pinned for the life of the tab.
+		if ('close' in renderSource) renderSource.close();
+		if ('close' in source) source.close();
+		throw new Error('This browser blocked canvas rendering, so images cannot be converted.');
+	}
 
 	if (mime === 'image/jpeg') {
 		context.fillStyle = '#ffffff';
